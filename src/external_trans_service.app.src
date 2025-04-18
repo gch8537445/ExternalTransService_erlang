@@ -1,0 +1,19 @@
+{application, external_trans_service, [
+    {description, "外部运力服务 - 企业用户cowboy服务后端"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {external_trans_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        cowboy,
+        jsx,
+        hackney,
+        eredis,
+        poolboy
+    ]},
+    {env, []},
+    {modules, []},
+    {licenses, ["Apache 2.0"]},
+    {links, []}
+]}.
