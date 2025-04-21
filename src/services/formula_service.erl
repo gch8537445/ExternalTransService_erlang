@@ -158,12 +158,24 @@ is_night_fee_applicable(FeeItem) ->
     end.
 
 %% @doc 解析时间字符串
-%% 将ISO 8601格式的时间字符串解析为小时和分钟
+%% 将时间字符串解析为小时和分钟，支持ISO 8601格式和纯时间格式
 -spec parse_time(binary()) -> {integer(), integer()}.
 parse_time(TimeStr) ->
-    % 提取时间部分
-    [_, TimePart] = binary:split(TimeStr, <<"T">>),
-    [HourMinSec, _] = binary:split(TimePart, <<"Z">>),
+    % 根据格式选择不同的解析方式
+    HourMinSec = case binary:match(TimeStr, <<"T">>) of
+        nomatch ->
+            % 纯时间格式，如 "23:00:00"
+            TimeStr;
+        _ ->
+            % ISO 8601格式，如 "2025-04-21T23:00:00Z"
+            [_, TimePart] = binary:split(TimeStr, <<"T">>),
+            case binary:match(TimePart, <<"Z">>) of
+                nomatch -> TimePart;
+                _ -> [HMinS, _] = binary:split(TimePart, <<"Z">>), HMinS
+            end
+    end,
+    
+    % 分割时、分、秒
     [HourBin, MinBin, _] = binary:split(HourMinSec, <<":">>, [global]),
     
     % 转换为整数
