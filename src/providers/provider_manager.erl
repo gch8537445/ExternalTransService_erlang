@@ -129,7 +129,7 @@ handle_call({estimate_price, Start, End, UserId}, _From, State) ->
                 exit:{timeout, _} ->
                     {ProviderName, {error, timeout}};
                 Type:ErrorReason:Stack ->
-                    error_logger:error_msg(
+                    logger:error(
                         "Provider ~p estimatie failed: ~p:~p~n~p",
                         [ProviderName, Type, ErrorReason, Stack]
                     ),

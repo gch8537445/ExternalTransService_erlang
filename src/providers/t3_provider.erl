@@ -133,7 +133,7 @@ handle_info(refresh_config, State) ->
             catch
                 Type:Reason:Stack ->
                     % 记录错误日志
-                    error_logger:error_msg(
+                    logger:error(
                         "Failed to parse T3 provider config: ~p:~p~n~p", 
                         [Type, Reason, Stack]
                     ),
@@ -147,7 +147,7 @@ handle_info(refresh_config, State) ->
             end;
         {error, not_found} ->
             % 记录错误日志
-            error_logger:error_msg("T3 provider config not found: ~p", [ProviderKey]),
+            logger:error("T3 provider config not found: ~p", [ProviderKey]),
             % 设置定时器稍后重试
             erlang:send_after(5000, self(), refresh_config),
             % 如果是初始化阶段（没有配置），则终止进程
@@ -157,7 +157,7 @@ handle_info(refresh_config, State) ->
             end;
         {error, Reason} ->
             % 记录错误日志
-            error_logger:error_msg("Failed to get T3 provider config: ~p", [Reason]),
+            logger:error("Failed to get T3 provider config: ~p", [Reason]),
             % 设置定时器稍后重试
             erlang:send_after(5000, self(), refresh_config),
             % 如果是初始化阶段（没有配置），则终止进程

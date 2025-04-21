@@ -40,7 +40,7 @@ calculate_price(Rule, Variables) ->
         throw:{error, Reason} ->
             {error, Reason};
         Type:Reason:Stack ->
-            error_logger:error_msg(
+            logger:error(
                 "Formula calculation failed: ~p:~p~n~p", 
                 [Type, Reason, Stack]
             ),

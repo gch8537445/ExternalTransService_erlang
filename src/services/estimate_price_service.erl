@@ -147,7 +147,7 @@ calculate_prices(MapData, PricingRules) ->
         {ok, Result}
     catch
         Type:Reason:Stack ->
-            error_logger:error_msg(
+            logger:error(
                 "Price calculation failed: ~p:~p~n~p", 
                 [Type, Reason, Stack]
             ),

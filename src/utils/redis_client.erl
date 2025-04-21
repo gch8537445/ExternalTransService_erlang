@@ -131,7 +131,7 @@ with_retry(Fun, 0, _Sleep) ->
         Result -> Result
     catch
         Type:Reason:Stack ->
-            error_logger:error_msg(
+            logger:error(
                 "Redis operation failed: ~p:~p~n~p", 
                 [Type, Reason, Stack]
             ),
@@ -152,7 +152,7 @@ with_retry(Fun, Retries, Sleep) ->
             Result
     catch
         Type:Reason:Stack ->
-            error_logger:error_msg(
+            logger:error(
                 "Redis operation failed: ~p:~p~n~p", 
                 [Type, Reason, Stack]
             ),
