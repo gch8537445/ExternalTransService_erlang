@@ -15,7 +15,6 @@
     request/5
 ]).
 
--define(DEFAULT_TIMEOUT, 5000).
 -define(DEFAULT_HEADERS, #{
     <<"User-Agent">> => <<"ExternalTransService/1.0">>,
     <<"Accept">> => <<"application/json">>
@@ -66,10 +65,10 @@ post(Url, Body, Headers) ->
 request(Method, Url, Headers, Body, Options) ->
     % 合并默认头部
     MergedHeaders = maps:to_list(maps:merge(?DEFAULT_HEADERS, Headers)),
-    
-    % 合并默认选项
-    MergedOptions = [{recv_timeout, ?DEFAULT_TIMEOUT}, {follow_redirect, true} | Options],
-    
+    % 获取hackney配置
+    HackneyConfig = application:get_all_env(hackney),
+    % 合并默认选项和hackney配置
+    MergedOptions = HackneyConfig ++ Options,
     % 发送请求
     case hackney:request(Method, Url, MergedHeaders, Body, MergedOptions) of
         {ok, StatusCode, _RespHeaders, ClientRef} ->

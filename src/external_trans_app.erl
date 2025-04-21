@@ -27,7 +27,7 @@ start(_StartType, _StartArgs) ->
     % 启动HTTP服务器
     {ok, _} = cowboy:start_clear(
         http_listener,
-        [{port, 8080}],  % 监听端口
+        [{port, element(2, application:get_env(external_trans_service, http_port))}],% 监听端口
         #{env => #{dispatch => Dispatch}}
     ),
 
