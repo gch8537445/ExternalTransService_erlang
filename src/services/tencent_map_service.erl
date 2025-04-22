@@ -18,8 +18,6 @@
 
 %% @doc 获取路线距离和时间
 %% 调用腾讯地图API获取两点之间的驾车路线距离和时间
--spec get_distance_duration(binary(), binary()) -> 
-    {ok, map()} | {error, term()}.
 get_distance_duration(Start, End) ->
     % 从应用配置获取腾讯地图API配置
     case get_map_config() of
@@ -67,8 +65,7 @@ get_map_config() ->
 
 %% @doc 构建请求URL
 %% 构建腾讯地图API请求URL
--spec build_request_url(binary(), binary(), binary(), binary()) -> binary().
-build_request_url(Start, End, ApiKey, ApiUrl) ->
+build_request_url(Start, End, ApiUrl, ApiKey) ->
     % 分割起点和终点坐标
     [StartLat, StartLng] = binary:split(Start, <<",">>),
     [EndLat, EndLng] = binary:split(End, <<",">>),
