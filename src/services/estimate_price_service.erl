@@ -20,12 +20,12 @@ estimate_price(Start, End, UserId) ->
     case user_service:get_user_config(UserId) of
         {ok, UserConfig} ->
             % 检查是否使用自己的计算方式
-            case maps:get(<<"use_own_calculation">>, UserConfig, true) of
-                true ->
-                    % 使用自己的计算方式
+            case maps:get(<<"estimate_calc_type">>, UserConfig, 0) of
+                0 ->
+                    % 0, 使用自己的计算方式
                     calculate_price(Start, End, UserId);
-                false ->
-                    % 调用运力提供商的预估价接口
+                1 ->
+                    % 1, 调用运力提供商的预估价接口
                     call_provider_price(Start, End, UserId)
             end;
         {error, Reason} ->
@@ -107,7 +107,7 @@ calculate_prices(MapData, PricingRules) ->
 
                 % 计算价格
                 {ok, Price, Details} = formula_service:calculate_price(
-                    Rule, 
+                    Rule,
                     #{
                         <<"distance">> => DistanceKm,
                         <<"duration">> => DurationMin
@@ -143,7 +143,7 @@ calculate_prices(MapData, PricingRules) ->
     catch
         Type:Reason:Stack ->
             logger:error(
-                "Price calculation failed: ~p:~p~n~p", 
+                "Price calculation failed: ~p:~p~n~p",
                 [Type, Reason, Stack]
             ),
             {error, calculation_failed}

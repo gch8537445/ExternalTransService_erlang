@@ -23,7 +23,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-    config = #{} :: map()  % 提供商配置
+    config = #{provider_code => 1} :: map()  % 提供商配置
 }).
 
 %%====================================================================
@@ -84,7 +84,7 @@ handle_call({estimate_price, Params}, _From, State) ->
     RequestParamsWithSign = RequestParams#{<<"sign">> => Sign},
 
     % 发送请求
-    Url = <<Domain/binary, "/api/v1/priceEstimate">>,
+    Url = <<Domain/binary, "/v2/common/estimatePriceWithDetail">>,
     case http_client:post(Url, RequestParamsWithSign) of
         {ok, 200, ResponseBody} ->
             % 解析响应
