@@ -15,7 +15,6 @@
 
 %% @doc 获取计费规则
 %% 根据用户ID获取适用的计费规则
--spec get_pricing_rules(binary()) -> {ok, [map()]} | {error, term()}.
 get_pricing_rules(UserId) ->
     % 从Redis获取用户配置
     case user_service:get_user_config(UserId) of
@@ -39,7 +38,6 @@ get_pricing_rules(UserId) ->
 
 %% @doc 根据ipath_trans_code获取计费规则
 %% 从Redis获取指定ipath_trans_code的计费规则
--spec get_rule_by_trans_code(integer() | binary()) -> {ok, map()} | {error, term()}.
 get_rule_by_trans_code(TransCode) when is_integer(TransCode) ->
     % 转换为二进制
     get_rule_by_trans_code(integer_to_binary(TransCode));
@@ -73,7 +71,6 @@ get_rule_by_trans_code(TransCode) when is_binary(TransCode) ->
 
 %% @doc 获取ipath_trans_code的计费规则
 %% 从Redis获取指定ipath_trans_code的计费规则
--spec get_rules_for_trans_codes([integer()]) -> {ok, [map()]} | {error, term()}.
 get_rules_for_trans_codes(TransCodes) ->
     % 并行获取每个ipath_trans_code的计费规则
     try

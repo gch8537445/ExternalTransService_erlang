@@ -52,7 +52,6 @@ get_distance_duration(Start, End) ->
 
 %% @doc 获取地图配置
 %% 从应用配置获取腾讯地图API配置
--spec get_map_config() -> {ok, list()} | {error, term()}.
 get_map_config() ->
     % 从应用环境变量获取配置
     case application:get_env(external_trans_service, tencent_map) of
@@ -97,7 +96,6 @@ build_request_url(Start, End, ApiUrl, ApiKey) ->
 
 %% @doc 解析响应
 %% 解析腾讯地图API响应
--spec parse_response(binary(), binary(), binary()) -> {ok, map()} | {error, term()}.
 parse_response(ResponseBody, Start, End) ->
     try jsx:decode(ResponseBody, [return_maps]) of
         #{<<"status">> := 0, <<"result">> := Result} ->
@@ -127,7 +125,6 @@ parse_response(ResponseBody, Start, End) ->
 
 %% @doc 缓存结果
 %% 将查询结果缓存到Redis
--spec cache_result(binary(), binary(), map()) -> ok | {error, term()}.
 cache_result(Start, End, Result) ->
     % 构建缓存键
     Key = <<"map:route:", Start/binary, ":", End/binary>>,

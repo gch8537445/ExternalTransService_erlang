@@ -182,7 +182,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @doc 计算签名
 %% 按照曹操专车API的签名规则计算签名
--spec calculate_sign(map(), binary()) -> binary().
 calculate_sign(Params, SignKey) ->
     % 按照键名排序
     SortedKeys = lists:sort(maps:keys(Params)),
@@ -204,7 +203,6 @@ calculate_sign(Params, SignKey) ->
     crypto:hash(md5, SignStrWithKey).
 
 %% @doc 提取车型和价格信息
--spec extract_car_types(map()) -> [map()].
 extract_car_types(Data) ->
     % 提取车型列表
     CarList = maps:get(<<"car_types">>, Data, []),

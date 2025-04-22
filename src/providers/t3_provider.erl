@@ -186,7 +186,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @doc 生成随机字符串
 %% 生成一个随机的nonce字符串
--spec generate_nonce() -> binary().
 generate_nonce() ->
     % 生成16字节的随机数据
     RandomBytes = crypto:strong_rand_bytes(16),
@@ -195,7 +194,6 @@ generate_nonce() ->
 
 %% @doc 计算签名
 %% 按照T3出行API的签名规则计算签名
--spec calculate_sign(map(), binary()) -> binary().
 calculate_sign(Params, AppSecret) ->
     % 按照键名排序
     SortedKeys = lists:sort(maps:keys(Params)),
@@ -217,7 +215,6 @@ calculate_sign(Params, AppSecret) ->
     crypto:hash(sha256, SignStrWithSecret).
 
 %% @doc 提取车型和价格信息
--spec extract_car_types(map()) -> [map()].
 extract_car_types(Data) ->
     % 提取车型列表
     CarList = maps:get(<<"car_types">>, Data, []),

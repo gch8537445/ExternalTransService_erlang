@@ -107,8 +107,6 @@ terminate(_Reason, _Req, _State) ->
 
 %% @doc 验证请求参数
 %% 检查起点、终点和用户ID是否有效
--spec validate_params(binary() | undefined, binary() | undefined, binary() | undefined) -> 
-    ok | {error, binary()}.
 validate_params(undefined, _, _) ->
     {error, <<"start_location">>};
 validate_params(_, undefined, _) ->
@@ -124,7 +122,6 @@ validate_params(Start, End, _UserId) ->
 
 %% @doc 验证坐标格式
 %% 坐标格式应为"纬度,经度"，例如"39.90469,116.40717"
--spec validate_coordinate(binary()) -> boolean().
 validate_coordinate(Coordinate) ->
     try
         % 分割坐标
@@ -139,7 +136,6 @@ validate_coordinate(Coordinate) ->
     end.
 
 %% @doc 将错误原因转换为二进制
--spec error_to_binary(atom() | binary() | string() | tuple()) -> binary().
 error_to_binary(Reason) when is_atom(Reason) ->
     atom_to_binary(Reason, utf8);
 error_to_binary(Reason) when is_list(Reason) ->

@@ -43,28 +43,22 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %% @doc 获取所有运力提供商
--spec get_all_providers() -> [atom()].
 get_all_providers() ->
     gen_server:call(?SERVER, get_all_providers).
 
 %% @doc 获取指定运力提供商的PID
--spec get_provider(atom()) -> {ok, pid()} | {error, not_found}.
 get_provider(ProviderName) ->
     gen_server:call(?SERVER, {get_provider, ProviderName}).
 
 %% @doc 获取指定运力提供商的配置
--spec get_provider_config(atom()) -> {ok, map()} | {error, not_found}.
 get_provider_config(ProviderName) ->
     gen_server:call(?SERVER, {get_provider_config, ProviderName}).
 
 %% @doc 注册运力提供商配置
--spec register_provider_config(atom(), map()) -> ok.
 register_provider_config(ProviderName, Config) ->
     gen_server:cast(?SERVER, {register_provider_config, ProviderName, Config}).
 
 %% @doc 调用所有运力提供商的预估价接口
--spec estimate_price(binary(), binary(), binary()) -> 
-    {ok, [#{atom() => term()}]} | {error, term()}.
 estimate_price(Start, End, UserId) ->
     gen_server:call(?SERVER, {estimate_price, Start, End, UserId}).
 
@@ -193,7 +187,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @doc 并行映射函数
 %% 并行执行函数F在列表L的每个元素上
--spec pmap(fun((A) -> B), [A]) -> [B].
 pmap(F, L) ->
     Parent = self(),
     Refs = lists:map(

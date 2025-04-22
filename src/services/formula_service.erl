@@ -15,7 +15,6 @@
 
 %% @doc 计算价格
 %% 根据计费规则和变量计算价格
--spec calculate_price(map(), map()) -> {ok, float(), map()} | {error, term()}.
 calculate_price(Rule, Variables) ->
     % 提取公式模板
     FormulaTemplate = maps:get(<<"formula_template">>, Rule, <<"">>),
@@ -53,7 +52,6 @@ calculate_price(Rule, Variables) ->
 
 %% @doc 构建变量映射
 %% 将费用项和其他变量合并成一个映射
--spec build_variable_map([map()], map()) -> map().
 build_variable_map(FeeItems, Variables) ->
     % 从费用项构建基本变量映射
     BaseMap = lists:foldl(
@@ -119,7 +117,6 @@ build_variable_map(FeeItems, Variables) ->
 
 %% @doc 检查夜间费用是否适用
 %% 根据当前时间和费用项的时间范围判断夜间费用是否适用
--spec is_night_fee_applicable(map()) -> boolean().
 is_night_fee_applicable(FeeItem) ->
     % 获取费用名称
     FeeName = maps:get(<<"fee_name">>, FeeItem, <<>>),
@@ -159,7 +156,6 @@ is_night_fee_applicable(FeeItem) ->
 
 %% @doc 解析时间字符串
 %% 将时间字符串解析为小时和分钟，支持ISO 8601格式和纯时间格式
--spec parse_time(binary()) -> {integer(), integer()}.
 parse_time(TimeStr) ->
     % 根据格式选择不同的解析方式
     HourMinSec = case binary:match(TimeStr, <<"T">>) of
@@ -186,7 +182,6 @@ parse_time(TimeStr) ->
 
 %% @doc 解析公式
 %% 将公式模板中的变量替换为实际值
--spec parse_formula(binary(), map()) -> {binary(), map()}.
 parse_formula(FormulaTemplate, VariableMap) ->
     % 正则表达式匹配变量
     {ok, Pattern} = re:compile(<<"#\\{([^}]+)\\}">>),
@@ -222,7 +217,6 @@ parse_formula(FormulaTemplate, VariableMap) ->
 
 %% @doc 计算公式
 %% 计算数学公式的结果
--spec calculate_formula(binary()) -> float().
 calculate_formula(Formula) ->
     % 将公式转换为Erlang表达式
     {ok, Tokens, _} = erl_scan:string(binary_to_list(Formula) ++ "."),

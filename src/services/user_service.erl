@@ -15,7 +15,6 @@
 
 %% @doc 获取用户配置
 %% 从Redis获取用户配置信息
--spec get_user_config(binary()) -> {ok, map()} | {error, term()}.
 get_user_config(UserId) ->
     % 构建Redis键
     Key = <<"user:", UserId/binary>>,

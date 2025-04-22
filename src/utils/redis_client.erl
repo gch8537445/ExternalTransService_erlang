@@ -134,13 +134,6 @@ keys(Pattern) ->
 %% 内部函数
 %%====================================================================
 
-%% @doc 执行Redis命令
-%% 通过连接池执行Redis命令
-execute_command(Command) ->
-    with_retry(fun() ->
-        poolboy:transaction(?POOL, fun(Worker) -> eredis:q(Worker, Command) end)
-    end).
-
 %% @doc 带重试的执行函数
 %% 如果函数执行失败，会重试几次
 with_retry(Fun) ->

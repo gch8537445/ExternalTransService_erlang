@@ -25,7 +25,6 @@ start_link() ->
 
 %% @doc 启动一个运力提供商
 %% 动态添加一个运力提供商子进程
--spec start_provider(atom()) -> {ok, pid()} | {error, term()}.
 start_provider(ProviderModule) ->
     % 创建子进程规范
     ChildSpec = #{
@@ -41,7 +40,6 @@ start_provider(ProviderModule) ->
 
 %% @doc 停止一个运力提供商
 %% 动态移除一个运力提供商子进程
--spec stop_provider(atom()) -> ok | {error, term()}.
 stop_provider(ProviderModule) ->
     % 终止并移除子进程
     case supervisor:terminate_child(?SERVER, ProviderModule) of

@@ -15,8 +15,6 @@
 
 %% @doc 预估价
 %% 根据用户的设置，决定自己算还是调用运力的预估价接口
--spec estimate_price(binary(), binary(), binary()) -> 
-    {ok, map()} | {error, term()}.
 estimate_price(Start, End, UserId) ->
     % 从Redis获取用户配置
     case user_service:get_user_config(UserId) of
@@ -40,8 +38,6 @@ estimate_price(Start, End, UserId) ->
 
 %% @doc 计算预估价
 %% 使用自己的计算方式计算预估价
--spec calculate_price(binary(), binary(), binary()) -> 
-    {ok, map()} | {error, term()}.
 calculate_price(Start, End, UserId) ->
     % 并行执行两个操作：
     % 1. 调用腾讯地图API获取行程距离和行程用时
@@ -91,7 +87,6 @@ calculate_price(Start, End, UserId) ->
 
 %% @doc 计算所有车型的预估价
 %% 根据地图数据和计费规则计算所有车型的预估价
--spec calculate_prices(map(), [map()]) -> {ok, map()} | {error, term()}.
 calculate_prices(MapData, PricingRules) ->
     % 提取距离和时间
     Distance = maps:get(distance, MapData),  % 单位：米
@@ -156,8 +151,6 @@ calculate_prices(MapData, PricingRules) ->
 
 %% @doc 调用运力提供商的预估价接口
 %% 通过provider_manager调用所有运力提供商的预估价接口
--spec call_provider_price(binary(), binary(), binary()) -> 
-    {ok, map()} | {error, term()}.
 call_provider_price(Start, End, UserId) ->
     % 调用provider_manager获取所有提供商的预估价
     case provider_manager:estimate_price(Start, End, UserId) of
