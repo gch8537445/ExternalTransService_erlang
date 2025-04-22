@@ -26,11 +26,14 @@ get_pricing_rules(UserId) ->
                     % 获取每个ipath_trans_code的计费规则
                     get_rules_for_trans_codes(TransCodes);
                 {ok, []} ->
+                    logger:error("用户没有配置任何运力代码 [UserId: ~p]", [UserId]),
                     {error, no_trans_codes_configured};
                 error ->
+                    logger:error("用户配置中找不到运力代码列表 [UserId: ~p]", [UserId]),
                     {error, no_trans_codes_configured}
             end;
         {error, Reason} ->
+            logger:error("获取计费规则失败, 无法获取用户配置 [UserId: ~p]: ~p", [UserId, Reason]),
             {error, Reason}
     end.
 
@@ -50,12 +53,17 @@ get_rule_by_trans_code(TransCode) when is_binary(TransCode) ->
             try jsx:decode(RuleJson, [return_maps]) of
                 Rule -> {ok, Rule}
             catch
-                _:_ -> {error, invalid_rule_format}
+                Type:Error:Stack -> 
+                    logger:error("计费规则解析失败 [TransCode: ~p]: ~p:~p~n~p", 
+                        [TransCode, Type, Error, Stack]),
+                    {error, invalid_rule_format}
             end;
         {error, not_found} ->
             % 如果找不到规则，直接返回错误
+            logger:error("找不到计费规则 [TransCode: ~p]", [TransCode]),
             {error, {rule_not_found, TransCode}};
         {error, Reason} ->
+            logger:error("获取计费规则失败 [TransCode: ~p]: ~p", [TransCode, Reason]),
             {error, Reason}
     end.
 
@@ -77,6 +85,7 @@ get_rules_for_trans_codes(TransCodes) ->
                         Rule;
                     {error, Reason} -> 
                         % 如果获取失败，直接抛出错误
+                        logger:error("获取运力代码计费规则失败 [TransCode: ~p]: ~p", [TransCode, Reason]),
                         throw({error, {rule_fetch_failed, TransCode, Reason}})
                 end
             end,
@@ -85,5 +94,6 @@ get_rules_for_trans_codes(TransCodes) ->
         {ok, Rules}
     catch
         throw:{error, Reason} ->
+            logger:error("获取多个计费规则时失败: ~p", [Reason]),
             {error, Reason}
     end.

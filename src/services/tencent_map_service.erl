@@ -12,8 +12,6 @@
 %% 内部导出函数，供测试使用
 -export([parse_response/3, cache_result/3]).
 
--define(TENCENT_MAP_API_URL, <<"https://apis.map.qq.com/ws/direction/v1/driving/">>).
-
 %%====================================================================
 %% API 函数
 %%====================================================================
@@ -23,26 +21,30 @@
 -spec get_distance_duration(binary(), binary()) -> 
     {ok, map()} | {error, term()}.
 get_distance_duration(Start, End) ->
-    % 从Redis获取腾讯地图API配置
+    % 从应用配置获取腾讯地图API配置
     case get_map_config() of
         {ok, Config} ->
-            % 提取API密钥
-            ApiKey = maps:get(<<"key">>, Config, <<"">>),
-
+            % 提取API URL和密钥, 转换为二进制格式
             % 构建请求URL
-            Url = build_request_url(Start, End, ApiKey),
-
+            Url = build_request_url(Start, End,
+                list_to_binary(proplists:get_value(api_url, Config)),
+                list_to_binary(proplists:get_value(key, Config))),
             % 发送请求
             case http_client:get(Url) of
                 {ok, 200, ResponseBody} ->
                     % 解析响应
                     parse_response(ResponseBody, Start, End);
                 {ok, StatusCode, _} ->
+                    logger:error("腾讯地图API请求失败 [Start: ~p, End: ~p]: HTTP错误 ~p", 
+                        [Start, End, StatusCode]),
                     {error, {http_error, StatusCode}};
                 {error, Reason} ->
+                    logger:error("腾讯地图API请求发送失败 [Start: ~p, End: ~p]: ~p", 
+                        [Start, End, Reason]),
                     {error, {request_failed, Reason}}
             end;
         {error, Reason} ->
+            logger:error("获取腾讯地图配置失败: ~p", [Reason]),
             {error, Reason}
     end.
 
@@ -51,25 +53,22 @@ get_distance_duration(Start, End) ->
 %%====================================================================
 
 %% @doc 获取地图配置
-%% 从Redis获取腾讯地图API配置
--spec get_map_config() -> {ok, map()} | {error, term()}.
+%% 从应用配置获取腾讯地图API配置
+-spec get_map_config() -> {ok, list()} | {error, term()}.
 get_map_config() ->
-    % 从Redis获取配置
-    case redis_client:get(<<"config:tencent_map">>) of
-        {ok, ConfigJson} ->
-            try jsx:decode(ConfigJson, [return_maps]) of
-                Config -> {ok, Config}
-            catch
-                _:_ -> {error, invalid_map_config}
-            end;
-        {error, Reason} ->
-            {error, Reason}
+    % 从应用环境变量获取配置
+    case application:get_env(external_trans_service, tencent_map) of
+        {ok, Config} ->
+            {ok, Config};
+        undefined ->
+            logger:error("腾讯地图配置未设置"),
+            {error, config_not_found}
     end.
 
 %% @doc 构建请求URL
 %% 构建腾讯地图API请求URL
--spec build_request_url(binary(), binary(), binary()) -> binary().
-build_request_url(Start, End, ApiKey) ->
+-spec build_request_url(binary(), binary(), binary(), binary()) -> binary().
+build_request_url(Start, End, ApiKey, ApiUrl) ->
     % 分割起点和终点坐标
     [StartLat, StartLng] = binary:split(Start, <<",">>),
     [EndLat, EndLng] = binary:split(End, <<",">>),
@@ -97,7 +96,7 @@ build_request_url(Start, End, ApiKey) ->
     ),
 
     % 构建完整URL
-    <<?TENCENT_MAP_API_URL/binary, "?", QueryString/binary>>.
+    <<ApiUrl/binary, "?", QueryString/binary>>.
 
 %% @doc 解析响应
 %% 解析腾讯地图API响应
@@ -119,9 +118,13 @@ parse_response(ResponseBody, Start, End) ->
                 end_location => End
             }};
         #{<<"status">> := Status, <<"message">> := Message} ->
+            logger:error("腾讯地图API返回错误 [Start: ~p, End: ~p]: ~p - ~p", 
+                [Start, End, Status, Message]),
             {error, {api_error, Status, Message}}
     catch
-        _:_ ->
+        Type:Error:Stack ->
+            logger:error("腾讯地图API响应解析失败 [Start: ~p, End: ~p]: ~p:~p~n~p", 
+                [Start, End, Type, Error, Stack]),
             {error, invalid_response}
     end.
 
@@ -131,12 +134,14 @@ parse_response(ResponseBody, Start, End) ->
 cache_result(Start, End, Result) ->
     % 构建缓存键
     Key = <<"map:route:", Start/binary, ":", End/binary>>,
-
     % 序列化结果
     ResultJson = jsx:encode(Result),
 
     % 存储到Redis，设置过期时间为1小时
     case redis_client:setex(Key, 3600, ResultJson) of
         {ok, _} -> ok;
-        {error, Reason} -> {error, Reason}
+        {error, Reason} -> 
+            logger:error("缓存地图路线结果失败 [Start: ~p, End: ~p]: ~p", 
+                [Start, End, Reason]),
+            {error, Reason}
     end.

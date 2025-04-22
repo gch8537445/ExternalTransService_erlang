@@ -26,10 +26,15 @@ get_user_config(UserId) ->
             try jsx:decode(ConfigJson, [return_maps]) of
                 Config -> {ok, Config}
             catch
-                _:_ -> {error, invalid_user_config}
+                Type:Error:Stack -> 
+                    logger:error("用户配置解析失败 [UserId: ~p]: ~p:~p~n~p", 
+                        [UserId, Type, Error, Stack]),
+                    {error, invalid_user_config}
             end;
         {error, not_found} ->
+            logger:error("用户配置不存在 [UserId: ~p]", [UserId]),
             {error, {user_not_found, UserId}};
         {error, Reason} ->
+            logger:error("获取用户配置失败 [UserId: ~p]: ~p", [UserId, Reason]),
             {error, Reason}
     end.
