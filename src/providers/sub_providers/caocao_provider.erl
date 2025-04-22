@@ -23,7 +23,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-    config = #{provider_code => 1} :: map()  % 提供商配置
+    config = #{} :: map()  % 提供商配置
 }).
 
 %%====================================================================
@@ -44,7 +44,7 @@ init([]) ->
     gen_server:cast(provider_manager, {register_provider, ?MODULE, self()}),
 
     % 初始化状态
-    State = #state{},
+    State = #state{config = #{}},
 
     % 启动定时器，定期刷新配置
     {ok, _} = timer:send_interval(60000, refresh_config),
@@ -61,9 +61,10 @@ handle_call({estimate_price, Params}, _From, State) ->
 
     % 获取配置
     Config = State#state.config,
-    Domain = maps:get(<<"CAOCAO_DOMAIN">>, Config, <<"https://cop.caocaokeji.cn">>),
-    ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, Config, <<"">>),
-    SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, Config, <<"">>),
+    ProviderCode = maps:get(<<"provider_code">>, Config),
+    Domain = maps:get(<<"CAOCAO_DOMAIN">>, Config),
+    ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, Config),
+    SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, Config),
 
     % 构建请求参数
     [StartLat, StartLng] = binary:split(Start, <<",">>),
@@ -123,8 +124,6 @@ handle_info(refresh_config, State) ->
                 Config = jsx:decode(ConfigJson, [return_maps]),
                 % 更新状态
                 NewState = State#state{config = Config},
-                % 注册配置到提供商管理器
-                provider_manager:register_provider_config(?MODULE, Config),
                 {noreply, NewState}
             catch
                 Type:Reason:Stack ->

@@ -19,6 +19,8 @@ start(_StartType, _StartArgs) ->
     % 定义HTTP路由
     Dispatch = cowboy_router:compile([
         {'_', [
+            % 运力提供商管理API路由
+            {"/api/provider", provider_management_handler, []},
             % 预估价API路由
             {"/api/estimate_price", estimate_price_handler, []}
         ]}
