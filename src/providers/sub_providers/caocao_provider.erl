@@ -20,19 +20,13 @@
     code_change/3
 ]).
 
--define(SERVER, ?MODULE).
-
--record(state, {
-    config = #{} :: map()  % 提供商配置
-}).
-
 %%====================================================================
 %% API 函数
 %%====================================================================
 
 %% @doc 启动服务器
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 %%====================================================================
 %% gen_server回调函数
@@ -40,15 +34,8 @@ start_link() ->
 
 %% @doc 初始化服务器
 init([]) ->
-    % 注册到提供商管理器
-    gen_server:cast(provider_manager, {register_provider, ?MODULE, self()}),
-
     % 初始化状态
-    State = #state{config = #{}},
-
-    % 启动定时器，定期刷新配置
-    {ok, _} = timer:send_interval(60000, refresh_config),
-
+    State = #{},
     % 立即加载配置
     {ok, handle_info(refresh_config, State)}.
 
@@ -60,11 +47,9 @@ handle_call({estimate_price, Params}, _From, State) ->
     _UserId = maps:get(user_id, Params),
 
     % 获取配置
-    Config = State#state.config,
-    ProviderCode = maps:get(<<"provider_code">>, Config),
-    Domain = maps:get(<<"CAOCAO_DOMAIN">>, Config),
-    ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, Config),
-    SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, Config),
+    Domain = maps:get(<<"CAOCAO_DOMAIN">>, State),
+    ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, State),
+    SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, State),
 
     % 构建请求参数
     [StartLat, StartLng] = binary:split(Start, <<",">>),
@@ -121,46 +106,27 @@ handle_info(refresh_config, State) ->
         {ok, ConfigJson} ->
             try
                 % 解析JSON配置
-                Config = jsx:decode(ConfigJson, [return_maps]),
+                NewState = jsx:decode(ConfigJson, [return_maps]),
                 % 更新状态
-                NewState = State#state{config = Config},
                 {noreply, NewState}
             catch
                 Type:Reason:Stack ->
                     % 记录错误日志
                     logger:error(
-                        "Failed to parse Caocao provider config: ~p:~p~n~p", 
+                        "解析曹操配置失败: ~p:~p~n~p",
                         [Type, Reason, Stack]
                     ),
                     % 设置定时器稍后重试
-                    erlang:send_after(5000, self(), refresh_config),
-                    % 如果是初始化阶段（没有配置），则终止进程
-                    case maps:size(State#state.config) of
-                        0 -> {stop, {config_error, Reason}, State};
-                        _ -> {noreply, State} % 保持现有配置继续运行
-                    end
+                    erlang:send_after(5000, self(), refresh_config)
             end;
         {error, not_found} ->
             % 记录错误日志
-            logger:error("Caocao provider config not found: ~p", [ProviderKey]),
-            % 设置定时器稍后重试
-            erlang:send_after(5000, self(), refresh_config),
-            % 如果是初始化阶段（没有配置），则终止进程
-            case maps:size(State#state.config) of
-                0 -> {stop, {config_error, not_found}, State};
-                _ -> {noreply, State} % 保持现有配置继续运行
-            end;
+            logger:error("未找到曹操的配置: ~p", [ProviderKey]);
         {error, Reason} ->
             % 记录错误日志
-            logger:error("Failed to get Caocao provider config: ~p", [Reason]),
-            % 设置定时器稍后重试
-            erlang:send_after(5000, self(), refresh_config),
-            % 如果是初始化阶段（没有配置），则终止进程
-            case maps:size(State#state.config) of
-                0 -> {stop, {config_error, Reason}, State};
-                _ -> {noreply, State} % 保持现有配置继续运行
-            end
-    end;
+            logger:error("获取曹操配置失败: ~p", [Reason])
+    end,
+    {noreply, State};
 
 handle_info(_Info, State) ->
     {noreply, State}.

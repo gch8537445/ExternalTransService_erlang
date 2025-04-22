@@ -34,14 +34,14 @@ handle_request(<<"POST">>, Req0) ->
                 handle_load_provider(RequestData);
             <<"unload_provider">> -> 
                 handle_unload_provider(RequestData);
-            <<"list_all_providers">> -> 
-                handle_list_all_providers();
+            <<"list_providers">> -> 
+                handle_list_providers();
             <<"reload_all_providers">> -> 
                 handle_reload_all_providers();
             _ ->
                 {error, invalid_operation}
         end,
-        
+
         % 生成响应
         case Response of
             {ok, Result} ->
@@ -72,8 +72,8 @@ handle_request(<<"POST">>, Req0) ->
 
 handle_request(<<"GET">>, Req) ->
     % 列出所有提供商
-    Response = handle_list_all_providers(),
-    
+    Response = handle_list_providers(),
+
     % 生成响应
     case Response of
         {ok, Result} ->
@@ -104,18 +104,20 @@ handle_request(_, Req) ->
 %% @doc 处理加载运力提供商
 handle_load_provider(RequestData) ->
     % 获取提供商名称
-    ProviderName = maps:get(<<"provider_name">>, RequestData, undefined),
+    ProviderModule = maps:get(<<"provider_module">>, RequestData, undefined),
     % 校验请求参数
-    case ProviderName of
+    case ProviderModule of
         undefined ->
-            {error, missing_provider_name};
+            {error, missing_provider_module};
         _ ->
             % 转换为atom
-            ProviderModule = binary_to_atom(ProviderName, utf8),
             % 加载提供商
-            case provider_manager:load_provider(ProviderModule) of
+            case provider_manager:load_provider(binary_to_atom(ProviderModule, utf8)) of
                 {ok, _Pid} ->
-                    {ok, #{message => <<"运力提供商加载成功"/utf8>>, provider => ProviderName}};
+                    {ok, #{
+                        message => <<"运力提供商加载成功"/utf8>>,
+                        provider_module => ProviderModule
+                    }};
                 {error, {already_started, _}} ->
                     {error, provider_already_exists};
                 {error, Reason} ->
@@ -125,32 +127,32 @@ handle_load_provider(RequestData) ->
 
 %% @doc 处理卸载运力提供商
 handle_unload_provider(RequestData) ->
-    % 获取提供商名称
-    ProviderName = maps:get(<<"provider_name">>, RequestData, undefined),
+    % 获取提供商代码
+    ProviderModule = maps:get(<<"provider_module">>, RequestData, undefined),
+
     % 校验请求参数
-    case ProviderName of
+    case ProviderModule of
         undefined ->
-            {error, missing_provider_name};
+            {error, missing_provider_code};
         _ ->
             % 转换为atom
-            ProviderModule = binary_to_atom(ProviderName, utf8),
             % 卸载提供商
-            case provider_manager:unload_provider(ProviderModule) of
+            case provider_manager:unload_provider(binary_to_atom(ProviderModule, utf8)) of
                 ok ->
-                    {ok, #{message => <<"运力提供商卸载成功"/utf8>>, provider => ProviderName}};
+                    {ok, #{
+                        message => <<"运力提供商卸载成功"/utf8>>,
+                        provider_code => ProviderModule
+                    }};
                 {error, Reason} ->
                     {error, Reason}
             end
     end.
 
 %% @doc 列出所有提供商
-handle_list_all_providers() ->
+handle_list_providers() ->
     try
         % 获取所有提供商
-        Providers = provider_manager:get_all_providers(),
-        % 转换为二进制
-        ProvidersBinary = [atom_to_binary(P, utf8) || P <- Providers],
-        {ok, #{providers => ProvidersBinary}}
+        {ok, provider_manager:get_all_providers()}
     catch
         _:Reason ->
             {error, Reason}
@@ -160,8 +162,7 @@ handle_list_all_providers() ->
 handle_reload_all_providers() ->
     try
         % 加载所有提供商
-        Result = provider_manager:load_all_providers(),
-        {ok, #{result => Result}}
+        {ok, provider_manager:load_all_providers()}
     catch
         _:Reason ->
             {error, Reason}

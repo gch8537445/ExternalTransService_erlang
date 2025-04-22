@@ -13,15 +13,13 @@
 %% 监督者回调函数
 -export([init/1]).
 
--define(SERVER, ?MODULE).
-
 %%====================================================================
 %% API 函数
 %%====================================================================
 
 %% @doc 启动监督者
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @doc 启动一个运力提供商
 %% 动态添加一个运力提供商子进程
@@ -36,15 +34,15 @@ start_provider(ProviderModule) ->
         modules => [ProviderModule]
     },
     % 动态添加子进程
-    supervisor:start_child(?SERVER, ChildSpec).
+    supervisor:start_child(?MODULE, ChildSpec).
 
 %% @doc 停止一个运力提供商
 %% 动态移除一个运力提供商子进程
 stop_provider(ProviderModule) ->
     % 终止并移除子进程
-    case supervisor:terminate_child(?SERVER, ProviderModule) of
+    case supervisor:terminate_child(?MODULE, ProviderModule) of
         ok ->
-            supervisor:delete_child(?SERVER, ProviderModule);
+            supervisor:delete_child(?MODULE, ProviderModule);
         Error ->
             Error
     end.
