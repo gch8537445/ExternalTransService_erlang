@@ -59,7 +59,7 @@ handle_call({estimate_price, Params}, _From, State) ->
     % 构建请求体
     RequestParams = #{
         <<"client_id">> => ClientId,
-        <<"timestamp">> => integer_to_binary(erlang:system_time(second)),
+        <<"timestamp">> => integer_to_binary(erlang:system_time(millisecond)),
         <<"from_latitude">> => StartLat,
         <<"from_longitude">> => StartLng,
         <<"to_latitude">> => EndLat,

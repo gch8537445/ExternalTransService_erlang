@@ -90,7 +90,7 @@ handle_call({estimate_price, Start, End, UserId}, _From, State) ->
     Results = pmap(
         fun({ProviderModule, Pid}) ->
             try
-                case gen_server:call(Pid, {estimate_price, Params}, 3000) of
+                case gen_server:call(Pid, {estimate_price, Params}, 5000) of
                     {ok, Result} ->
                         {ProviderModule, Result};
                     {error, Reason} ->
