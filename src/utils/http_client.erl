@@ -15,11 +15,6 @@
     request/5
 ]).
 
--define(DEFAULT_HEADERS, #{
-    <<"User-Agent">> => <<"ExternalTransService/1.0">>,
-    <<"Accept">> => <<"application/json">>
-}).
-
 %%====================================================================
 %% API 函数
 %%====================================================================
@@ -27,7 +22,7 @@
 %% @doc 发送GET请求
 %% 使用默认选项发送GET请求
 get(Url) ->
-    get(Url, #{}).
+    get(Url, []).
 
 %% @doc 发送GET请求
 %% 使用指定的头部发送GET请求
@@ -57,14 +52,12 @@ post(Url, Body, Headers) ->
 %% @doc 发送HTTP请求
 %% 使用hackney库发送HTTP请求
 request(Method, Url, Headers, Body, Options) ->
-    % 合并默认头部
-    MergedHeaders = maps:to_list(maps:merge(?DEFAULT_HEADERS, Headers)),
     % 获取hackney配置
     HackneyConfig = application:get_all_env(hackney),
     % 合并默认选项和hackney配置
     MergedOptions = HackneyConfig ++ Options,
     % 发送请求
-    case hackney:request(Method, Url, MergedHeaders, Body, MergedOptions) of
+    case hackney:request(Method, Url, Headers, Body, MergedOptions) of
         {ok, StatusCode, _RespHeaders, ClientRef} ->
             % 读取响应体
             case hackney:body(ClientRef) of

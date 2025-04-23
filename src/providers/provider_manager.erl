@@ -227,7 +227,9 @@ load_provider_modules(State) ->
                         {module, ProviderModule} ->
                             % 启动提供商
                             case provider_sup:start_provider(ProviderModule) of
-                                {ok, Pid} -> 
+                                {ok, Pid} ->
+                                    % 监控提供商进程
+                                    erlang:monitor(process, Pid),
                                     logger:notice("自动加载并启动运力提供商: ~p", [ProviderModule]),
                                     % 更新状态，将 ProviderModule => Pid 添加到映射中
                                     NewStateAcc = StateAcc#{ProviderModule => Pid},

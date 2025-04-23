@@ -36,8 +36,9 @@ start_link() ->
 init([]) ->
     % 初始化状态
     State = #{},
-    % 立即加载配置
-    {ok, handle_info(refresh_config, State)}.
+    % 立即发送消息加载配置
+    self() ! refresh_config,
+    {ok, State}.
 
 %% @doc 处理同步调用
 handle_call({estimate_price, Params}, _From, State) ->
@@ -59,30 +60,57 @@ handle_call({estimate_price, Params}, _From, State) ->
     RequestParams = #{
         <<"client_id">> => ClientId,
         <<"timestamp">> => integer_to_binary(erlang:system_time(second)),
-        <<"start_lat">> => StartLat,
-        <<"start_lng">> => StartLng,
-        <<"end_lat">> => EndLat,
-        <<"end_lng">> => EndLng
+        <<"from_latitude">> => StartLat,
+        <<"from_longitude">> => StartLng,
+        <<"to_latitude">> => EndLat,
+        <<"to_longitude">> => EndLng,
+        <<"car_type">> => <<"2,3,5,7,14,15">>,  % 支持多种车型
+        <<"city_code">> => maps:get(<<"city_code">>, State, <<"010">>),  % 默认北京
+        <<"order_type">> => <<"1">>  % 实时单
     },
 
     % 计算签名
-    Sign = calculate_sign(RequestParams, SignKey),
+    Sign = calculate_sign(RequestParams,#{<<"sign_key">> => SignKey}),
     RequestParamsWithSign = RequestParams#{<<"sign">> => Sign},
 
-    % 发送请求
-    Url = <<Domain/binary, "/v2/common/estimatePriceWithDetail">>,
-    case http_client:post(Url, RequestParamsWithSign) of
+    % 构建查询字符串
+    QueryString = maps:fold(
+        fun(Key, Value, Acc) ->
+            KeyStr = binary_to_list(Key),
+            ValueStr = binary_to_list(Value),
+            Encoded = KeyStr ++ "=" ++ uri_string:quote(ValueStr),
+            case Acc of
+                "" -> Encoded;
+                _ -> Acc ++ "&" ++ Encoded
+            end
+        end,
+        "",
+        RequestParamsWithSign
+    ),
+
+    % 发送GET请求
+    UrlWithParams = <<Domain/binary, "/v2/common/estimatePriceWithDetail?", (list_to_binary(QueryString))/binary>>,
+    logger:notice("曹操预估请求URL: ~p", [UrlWithParams]),
+    
+    case http_client:get(UrlWithParams) of
         {ok, 200, ResponseBody} ->
             % 解析响应
             try jsx:decode(ResponseBody, [return_maps]) of
-                #{<<"code">> := 0, <<"data">> := Data} ->
+                #{<<"code">> := 200, <<"data">> := Data, <<"success">> := true} ->
                     % 提取车型和价格信息
                     CarTypes = extract_car_types(Data),
                     {reply, {ok, CarTypes}, State};
                 #{<<"code">> := Code, <<"message">> := Message} ->
-                    {reply, {error, {api_error, Code, Message}}, State}
+                    % 处理API返回的错误信息
+                    {reply, {error, {api_error, Code, Message}}, State};
+                OtherResponse ->
+                    % 处理其他未知格式的响应
+                    logger:error("未知响应格式: ~p", [OtherResponse]),
+                    {reply, {error, {unknown_response_format, OtherResponse}}, State}
             catch
-                _:_ ->
+                Type:Reason:Stack ->
+                    % 记录错误日志
+                    logger:error("invalid_response: ~p:~p~n~p", [Type, Reason, Stack]),
                     {reply, {error, invalid_response}, State}
             end;
         {ok, StatusCode, _} ->
@@ -106,9 +134,10 @@ handle_info(refresh_config, State) ->
         {ok, ConfigJson} ->
             try
                 % 解析JSON配置
-                NewState = jsx:decode(ConfigJson, [return_maps]),
+                Config = jsx:decode(ConfigJson, [return_maps]),
                 % 更新状态
-                {noreply, NewState}
+                logger:notice("已加载曹操配置: ~p", [Config]),
+                {noreply, maps:merge(State, Config)}
             catch
                 Type:Reason:Stack ->
                     % 记录错误日志
@@ -117,16 +146,16 @@ handle_info(refresh_config, State) ->
                         [Type, Reason, Stack]
                     ),
                     % 设置定时器稍后重试
-                    erlang:send_after(5000, self(), refresh_config)
+                    erlang:send_after(5000, self(), refresh_config),
+                    {noreply, State}
             end;
-        {error, not_found} ->
-            % 记录错误日志
-            logger:error("未找到曹操的配置: ~p", [ProviderKey]);
         {error, Reason} ->
             % 记录错误日志
-            logger:error("获取曹操配置失败: ~p", [Reason])
-    end,
-    {noreply, State};
+            logger:error("获取曹操配置失败: ~p", [Reason]),
+            % 设置定时器稍后重试
+            erlang:send_after(5000, self(), refresh_config),
+            {noreply, State}
+    end;
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -148,51 +177,67 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc 计算签名
 %% 按照曹操专车API的签名规则计算签名
 calculate_sign(Params, SignKey) ->
+    % 添加签名密钥到参数中
+    ParamsWithKey = maps:merge(SignKey, Params),
     % 按照键名排序
-    SortedKeys = lists:sort(maps:keys(Params)),
+    SortedKeys = lists:sort(maps:keys(ParamsWithKey)),
 
-    % 构建签名字符串
+    % 构建签名字符串 (key1value1key2value2...)
     SignStr = lists:foldl(
         fun(Key, Acc) ->
-            Value = maps:get(Key, Params),
-            <<Acc/binary, Key/binary, "=", Value/binary, "&">>
+            Value = maps:get(Key, ParamsWithKey),
+            <<Acc/binary, Key/binary, Value/binary>>
         end,
         <<>>,
         SortedKeys
     ),
 
-    % 添加签名密钥
-    SignStrWithKey = <<SignStr/binary, "key=", SignKey/binary>>,
-
-    % 计算MD5
-    crypto:hash(md5, SignStrWithKey).
+    % 计算SHA1哈希
+    HashBin = crypto:hash(sha, SignStr),
+    
+    % 转换为小写十六进制字符串
+    list_to_binary([string:to_lower(io_lib:format("~2.16.0b", [X])) || <<X>> <= HashBin]).
 
 %% @doc 提取车型和价格信息
 extract_car_types(Data) ->
-    % 提取车型列表
-    CarList = maps:get(<<"car_types">>, Data, []),
+    % 将Data作为车型列表直接处理
+    CarList = Data,
 
     % 转换为标准格式
     lists:map(
         fun(Car) ->
             % 提取车型信息
-            CarId = maps:get(<<"car_id">>, Car, <<>>),
-            CarName = maps:get(<<"car_name">>, Car, <<>>),
+            CarType = maps:get(<<"carType">>, Car, 0),
+            CarName = maps:get(<<"name">>, Car, <<>>),
             Price = maps:get(<<"price">>, Car, 0),
+            OriginPrice = maps:get(<<"originPrice">>, Car, 0),
+            Distance = maps:get(<<"distance">>, Car, 0),
+            Duration = maps:get(<<"duration">>, Car, 0),
+            Details = maps:get(<<"detail">>, Car, []),
+
+            % 转换详情为标准格式
+            PriceDetails = lists:foldl(
+                fun(Item, Acc) ->
+                    Code = maps:get(<<"chargeCode">>, Item, <<>>),
+                    Amount = maps:get(<<"amount">>, Item, 0),
+                    Desc = maps:get(<<"chargeDesc">>, Item, <<>>),
+                    Acc#{Code => #{amount => Amount, desc => Desc}}
+                end,
+                #{},
+                Details
+            ),
 
             % 构建标准格式
             #{
                 provider => <<"caocao">>,
-                car_id => CarId,
+                car_type => CarType,
                 car_name => CarName,
                 price => Price,
+                original_price => OriginPrice,
                 currency => <<"CNY">>,
-                details => #{
-                    base_price => maps:get(<<"base_price">>, Car, 0),
-                    distance_price => maps:get(<<"distance_price">>, Car, 0),
-                    time_price => maps:get(<<"time_price">>, Car, 0),
-                    night_fee => maps:get(<<"night_fee">>, Car, 0)
-                }
+                distance => Distance,
+                duration => Duration,
+                details => PriceDetails
             }
         end,
         CarList
