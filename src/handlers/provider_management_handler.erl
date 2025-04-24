@@ -30,14 +30,14 @@ handle_request(<<"POST">>, Req0) ->
         Operation = maps:get(<<"operation">>, RequestData, undefined),
         % 处理不同的操作
         Response = case Operation of
-            <<"load_provider">> -> 
-                handle_load_provider(RequestData);
-            <<"unload_provider">> -> 
-                handle_unload_provider(RequestData);
-            <<"list_providers">> -> 
-                handle_list_providers();
-            <<"reload_all_providers">> -> 
-                handle_reload_all_providers();
+            <<"load_provider">> ->
+                load_provider(RequestData);
+            <<"unload_provider">> ->
+                unload_provider(RequestData);
+            <<"list_providers">> ->
+                provider_manager:get_all_providers();
+            <<"reload_all_providers">> ->
+                provider_manager:load_all_providers();
             _ ->
                 {error, invalid_operation}
         end,
@@ -72,7 +72,7 @@ handle_request(<<"POST">>, Req0) ->
 
 handle_request(<<"GET">>, Req) ->
     % 列出所有提供商
-    Response = handle_list_providers(),
+    Response = provider_manager:load_all_providers(),
 
     % 生成响应
     case Response of
@@ -102,7 +102,7 @@ handle_request(_, Req) ->
     }), Req).
 
 %% @doc 处理加载运力提供商
-handle_load_provider(RequestData) ->
+load_provider(RequestData) ->
     % 获取提供商名称
     ProviderModule = maps:get(<<"provider_module">>, RequestData, undefined),
     % 校验请求参数
@@ -126,7 +126,7 @@ handle_load_provider(RequestData) ->
     end.
 
 %% @doc 处理卸载运力提供商
-handle_unload_provider(RequestData) ->
+unload_provider(RequestData) ->
     % 获取提供商代码
     ProviderModule = maps:get(<<"provider_module">>, RequestData, undefined),
 
@@ -148,26 +148,6 @@ handle_unload_provider(RequestData) ->
             end
     end.
 
-%% @doc 列出所有提供商
-handle_list_providers() ->
-    try
-        % 获取所有提供商
-        {ok, provider_manager:get_all_providers()}
-    catch
-        _:Reason ->
-            {error, Reason}
-    end.
-
-%% @doc 重新加载所有提供商
-handle_reload_all_providers() ->
-    try
-        % 加载所有提供商
-        {ok, provider_manager:load_all_providers()}
-    catch
-        _:Reason ->
-            {error, Reason}
-    end.
-
 %% @doc 终止处理器
 terminate(_Reason, _Req, _State) ->
-    ok. 
+    ok.
