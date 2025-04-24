@@ -31,9 +31,9 @@ handle_request(<<"POST">>, Req0) ->
         % 处理不同的操作
         Response = case Operation of
             <<"load_provider">> ->
-                load_provider(RequestData);
+                provider_manager:load_provider(binary_to_atom(maps:get(<<"provider_module">>, RequestData, undefined), utf8));
             <<"unload_provider">> ->
-                unload_provider(RequestData);
+                provider_manager:unload_provider(binary_to_atom(maps:get(<<"provider_module">>, RequestData, undefined), utf8));
             <<"list_providers">> ->
                 provider_manager:get_all_providers();
             <<"reload_all_providers">> ->
@@ -72,7 +72,7 @@ handle_request(<<"POST">>, Req0) ->
 
 handle_request(<<"GET">>, Req) ->
     % 列出所有提供商
-    Response = provider_manager:load_all_providers(),
+    Response = provider_manager:get_all_providers(),
 
     % 生成响应
     case Response of
@@ -100,53 +100,6 @@ handle_request(_, Req) ->
         success => false,
         error => method_not_allowed
     }), Req).
-
-%% @doc 处理加载运力提供商
-load_provider(RequestData) ->
-    % 获取提供商名称
-    ProviderModule = maps:get(<<"provider_module">>, RequestData, undefined),
-    % 校验请求参数
-    case ProviderModule of
-        undefined ->
-            {error, missing_provider_module};
-        _ ->
-            % 转换为atom
-            % 加载提供商
-            case provider_manager:load_provider(binary_to_atom(ProviderModule, utf8)) of
-                {ok, _Pid} ->
-                    {ok, #{
-                        message => <<"运力提供商加载成功"/utf8>>,
-                        provider_module => ProviderModule
-                    }};
-                {error, {already_started, _}} ->
-                    {error, provider_already_exists};
-                {error, Reason} ->
-                    {error, Reason}
-            end
-    end.
-
-%% @doc 处理卸载运力提供商
-unload_provider(RequestData) ->
-    % 获取提供商代码
-    ProviderModule = maps:get(<<"provider_module">>, RequestData, undefined),
-
-    % 校验请求参数
-    case ProviderModule of
-        undefined ->
-            {error, missing_provider_code};
-        _ ->
-            % 转换为atom
-            % 卸载提供商
-            case provider_manager:unload_provider(binary_to_atom(ProviderModule, utf8)) of
-                ok ->
-                    {ok, #{
-                        message => <<"运力提供商卸载成功"/utf8>>,
-                        provider_code => ProviderModule
-                    }};
-                {error, Reason} ->
-                    {error, Reason}
-            end
-    end.
 
 %% @doc 终止处理器
 terminate(_Reason, _Req, _State) ->

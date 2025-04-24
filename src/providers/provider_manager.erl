@@ -127,57 +127,73 @@ estimate_price(Start, End, UserId) ->
 %% @doc 动态加载一个运力提供商
 %% ProviderModule: 运力提供商代码模块名
 load_provider(ProviderModule) ->
-    % 获取当前提供商列表
-    {ok, Providers} = get_all_providers(),
-    
-    % 检查提供商是否已经存在
-    case lists:member(ProviderModule, Providers) of
-        true ->
-            {error, provider_already_exists};
-        false ->
-            % 确保模块已加载
-            case code:ensure_loaded(ProviderModule) of
-                {module, ProviderModule} ->
-                    % 模块已经加载，初始化提供者
-                    try
-                        % 调用提供者的init函数初始化
-                        case ProviderModule:init([]) of
-                            {ok, _} ->
-                                % 提供者初始化成功，将其添加到ETS表中
-                                NewProviders = [ProviderModule | Providers],
-                                ets:insert(?ETS_TABLE, {?PROVIDER_KEY, NewProviders}),
-                                {ok, started};
-                            {error, InitError} ->
-                                {error, InitError}
-                        end
-                    catch
-                        Type:Error:Stack ->
-                            logger:error(
-                                "Provider ~p init failed: ~p:~p~n~p",
-                                [ProviderModule, Type, Error, Stack]
-                            ),
-                            {error, {init_failed, Error}}
-                    end;
-                {error, LoadError} ->
-                    % 模块加载失败
-                    {error, {module_load_failed, LoadError}}
+    case ProviderModule of
+        undefined ->
+            {error, missing_provider_module};
+        _ ->
+            % 获取当前提供商列表
+            {ok, Providers} = get_all_providers(),
+
+            % 检查提供商是否已经存在
+            case lists:member(ProviderModule, Providers) of
+                true ->
+                    {error, provider_already_exists};
+                false ->
+                    % 确保模块已加载
+                    case code:ensure_loaded(ProviderModule) of
+                        {module, ProviderModule} ->
+                            % 模块已经加载，初始化提供者
+                            try
+                                % 调用提供者的init函数初始化
+                                case ProviderModule:init([]) of
+                                    {ok, _} ->
+                                        % 提供者初始化成功，将其添加到ETS表中
+                                        NewProviders = [ProviderModule | Providers],
+                                        ets:insert(?ETS_TABLE, {?PROVIDER_KEY, NewProviders}),
+                                        {ok, #{
+                                            message => <<"运力提供商加载成功"/utf8>>,
+                                            provider_module => ProviderModule
+                                        }};
+                                    {error, InitError} ->
+                                        {error, InitError}
+                                end
+                            catch
+                                Type:Error:Stack ->
+                                    logger:error(
+                                        "Provider ~p init failed: ~p:~p~n~p",
+                                        [ProviderModule, Type, Error, Stack]
+                                    ),
+                                    {error, {init_failed, Error}}
+                            end;
+                        {error, LoadError} ->
+                            % 模块加载失败
+                            {error, {module_load_failed, LoadError}}
+                    end
             end
     end.
 
 %% @doc 动态卸载一个运力提供商
 unload_provider(ProviderModule) ->
-    % 获取当前提供商列表
-    {ok, Providers} = get_all_providers(),
-    
-    % 检查提供商是否存在
-    case lists:member(ProviderModule, Providers) of
-        true ->
-            % 从列表中移除提供商
-            NewProviders = lists:delete(ProviderModule, Providers),
-            ets:insert(?ETS_TABLE, {?PROVIDER_KEY, NewProviders}),
-            ok;
-        false ->
-            {error, provider_not_found}
+    case ProviderModule of
+        undefined ->
+            {error, missing_provider_module};
+        _ ->
+            % 获取当前提供商列表
+            {ok, Providers} = get_all_providers(),
+
+            % 检查提供商是否存在
+            case lists:member(ProviderModule, Providers) of
+                true ->
+                    % 从列表中移除提供商
+                    NewProviders = lists:delete(ProviderModule, Providers),
+                    ets:insert(?ETS_TABLE, {?PROVIDER_KEY, NewProviders}),
+                    {ok, #{
+                        message => <<"运力提供商卸载成功"/utf8>>,
+                        provider_code => ProviderModule
+                    }};
+                false ->
+                    {error, provider_not_found}
+            end
     end.
 
 %% @doc 加载所有运力提供商
