@@ -10,6 +10,7 @@
 %% gen_server回调函数
 -export([
     init/1,
+    start_link/0,
     handle_call/3,
     handle_cast/2,
     handle_info/2,
@@ -19,7 +20,6 @@
 
 %% API
 -export([
-    start_link/0,
     get_all_providers/0,
     estimate_price/3,
     load_provider/1,
@@ -32,16 +32,11 @@
 -define(PROVIDER_KEY, provider).
 
 %%====================================================================
-%% API 函数
+%% gen_server回调函数
 %%====================================================================
-
 %% @doc 启动服务器
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
-%%====================================================================
-%% gen_server回调函数
-%%====================================================================
 
 %% @doc 初始化服务器
 init([]) ->
@@ -55,13 +50,11 @@ init([]) ->
         _ ->
             ok
     end,
-
     % 初始化提供商列表
     ets:insert(?ETS_TABLE, {?PROVIDER_KEY, []}),
 
     % 启动后自动加载所有运力提供商
     load_all_providers(),
-
     % 返回初始状态（不再需要在state中存储提供商列表）
     {ok, #{}}.
 
@@ -78,6 +71,9 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+%%====================================================================
+%% API 函数
+%%====================================================================
 %% @doc 获取所有运力提供商
 get_all_providers() ->
     % 直接从ETS表中获取提供商列表
