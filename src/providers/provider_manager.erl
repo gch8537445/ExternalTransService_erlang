@@ -64,6 +64,15 @@ load_all_providers() ->
 init([]) ->
     % 注册运力提供商启动和停止事件
     ok = net_kernel:monitor_nodes(true),
+    
+    % 创建提供者配置ETS表
+    case ets:info(provider_config) of
+        undefined ->
+            ets:new(provider_config, [named_table, public, set]);
+        _ ->
+            ok
+    end,
+    
     % 启动后自动加载所有运力提供商
     self() ! load_all_providers,
     {ok, #{
@@ -88,9 +97,10 @@ handle_call({estimate_price, Start, End, UserId}, _From, State) ->
 
     % 并行发送请求
     Results = pmap(
-        fun({ProviderModule, Pid}) ->
+        fun({ProviderModule, _Pid}) ->
             try
-                case gen_server:call(Pid, {estimate_price, Params}, 5000) of
+                % 直接调用提供者模块的estimate_price函数
+                case ProviderModule:estimate_price(Params) of
                     {ok, Result} ->
                         {ProviderModule, Result};
                     {error, Reason} ->
@@ -122,18 +132,25 @@ handle_call({load_provider, ProviderModule}, _From, State) ->
             % 确保模块已加载
             case code:ensure_loaded(ProviderModule) of
                 {module, ProviderModule} ->
-                    % 模块已经加载，尝试启动
-                    case provider_sup:start_provider(ProviderModule) of
-                        {ok, Pid} -> 
-                            % 更新状态，将 ProviderModule => Pid 添加到映射中
-                            NewState = State#{ProviderModule => Pid},
-                            {reply, {ok, started}, NewState};
-                        {error, {already_started, Pid}} ->
-                            % 提供商已启动，将 ProviderModule => Pid 添加到映射中
-                            NewState = State#{ProviderModule => Pid},
-                            {reply, {ok, already_started}, NewState};
-                        {error, StartError} ->
-                            {reply, {error, StartError}, State}
+                    % 模块已经加载，初始化提供者
+                    try
+                        % 调用提供者的init函数初始化
+                        case ProviderModule:init([]) of
+                            {ok, _} ->
+                                % 提供者初始化成功，将其添加到状态中
+                                % 使用模块名称作为键和值
+                                NewState = State#{ProviderModule => ProviderModule},
+                                {reply, {ok, started}, NewState};
+                            {error, InitError} ->
+                                {reply, {error, InitError}, State}
+                        end
+                    catch
+                        Type:Error:Stack ->
+                            logger:error(
+                                "Provider ~p init failed: ~p:~p~n~p",
+                                [ProviderModule, Type, Error, Stack]
+                            ),
+                            {reply, {error, {init_failed, Error}}, State}
                     end;
                 {error, LoadError} ->
                     % 模块加载失败
@@ -147,9 +164,7 @@ handle_call({unload_provider, ProviderModule}, _From, State) ->
         {ok, _Pid} ->
             % 从状态中移除提供商映射
             NewState = maps:remove(ProviderModule, State),
-            % 尝试停止提供商进程
-            Reply = provider_sup:stop_provider(ProviderModule),
-            {reply, Reply, NewState};
+            {reply, ok, NewState};
         error ->
             {reply, {error, provider_not_found}, State}
     end;
@@ -225,23 +240,26 @@ load_provider_modules(State) ->
                     % 确保模块已加载
                     case code:ensure_loaded(ProviderModule) of
                         {module, ProviderModule} ->
-                            % 启动提供商
-                            case provider_sup:start_provider(ProviderModule) of
-                                {ok, Pid} ->
-                                    % 监控提供商进程
-                                    erlang:monitor(process, Pid),
-                                    logger:notice("自动加载并启动运力提供商: ~p", [ProviderModule]),
-                                    % 更新状态，将 ProviderModule => Pid 添加到映射中
-                                    NewStateAcc = StateAcc#{ProviderModule => Pid},
-                                    {[{ok, ProviderModule} | ResultsAcc], NewStateAcc};
-                                {error, {already_started, Pid}} ->
-                                    logger:notice("运力提供商已经启动: ~p", [ProviderModule]),
-                                    % 更新状态，将 ProviderModule => Pid 添加到映射中
-                                    NewStateAcc = StateAcc#{ProviderModule => Pid},
-                                    {[{ok, ProviderModule} | ResultsAcc], NewStateAcc};
-                                {error, Reason} ->
-                                    logger:error("启动运力提供商失败 ~p: ~p", [ProviderModule, Reason]),
-                                    {[{error, {start_failed, ProviderModule, Reason}} | ResultsAcc], StateAcc}
+                            % 初始化提供者
+                            try
+                                case ProviderModule:init([]) of
+                                    {ok, _} ->
+                                        % 监控提供商进程不再需要
+                                        logger:notice("自动加载并初始化运力提供商: ~p", [ProviderModule]),
+                                        % 更新状态，将 ProviderModule => ProviderModule 添加到映射中
+                                        NewStateAcc = StateAcc#{ProviderModule => ProviderModule},
+                                        {[{ok, ProviderModule} | ResultsAcc], NewStateAcc};
+                                    {error, Reason} ->
+                                        logger:error("初始化运力提供商失败 ~p: ~p", [ProviderModule, Reason]),
+                                        {[{error, {init_failed, ProviderModule, Reason}} | ResultsAcc], StateAcc}
+                                end
+                            catch
+                                Type:Error:Stack ->
+                                    logger:error(
+                                        "Provider ~p init failed: ~p:~p~n~p", 
+                                        [ProviderModule, Type, Error, Stack]
+                                    ),
+                                    {[{error, {init_failed, ProviderModule, Error}} | ResultsAcc], StateAcc}
                             end;
                         {error, Reason} ->
                             logger:error("加载运力提供商模块失败 ~p: ~p", [ProviderModule, Reason]),
@@ -252,10 +270,12 @@ load_provider_modules(State) ->
                 ProviderFiles
             ),
             
+            % 返回结果
             {{ok, Results}, NewState};
         {error, Reason} ->
-            logger:error("打开提供商目录失败: ~p", [Reason]),
-            {{error, {dir_open_failed, Reason}}, State}
+            % 无法读取提供商目录
+            logger:error("无法读取提供商目录: ~p", [Reason]),
+            {{error, {read_dir_failed, Reason}}, State}
     end.
 
 %% @doc 根据PID移除提供商

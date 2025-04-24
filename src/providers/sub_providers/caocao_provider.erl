@@ -5,19 +5,15 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(caocao_provider).
--behaviour(gen_server).
 
 %% API
 -export([start_link/0]).
 
-%% gen_server回调函数
+%% 导出函数
 -export([
     init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3
+    estimate_price/1,
+    refresh_config/0
 ]).
 
 %%====================================================================
@@ -26,31 +22,34 @@
 
 %% @doc 启动服务器
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    init([]).
 
 %%====================================================================
-%% gen_server回调函数
+%% 模块函数
 %%====================================================================
 
 %% @doc 初始化服务器
 init([]) ->
     % 初始化状态
     State = #{},
-    % 立即发送消息加载配置
-    self() ! refresh_config,
+    % 立即刷新配置
+    refresh_config(),
     {ok, State}.
 
-%% @doc 处理同步调用
-handle_call({estimate_price, Params}, _From, State) ->
+%% @doc 估算价格
+estimate_price(Params) ->
+    % 获取配置
+    {ok, Config} = get_config(),
+    
     % 提取参数
     Start = maps:get(start_location, Params),
     End = maps:get(end_location, Params),
     _UserId = maps:get(user_id, Params),
 
     % 获取配置
-    Domain = maps:get(<<"CAOCAO_DOMAIN">>, State),
-    ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, State),
-    SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, State),
+    Domain = maps:get(<<"CAOCAO_DOMAIN">>, Config),
+    ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, Config),
+    SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, Config),
 
     % 构建请求参数
     [StartLat, StartLng] = binary:split(Start, <<",">>),
@@ -65,7 +64,7 @@ handle_call({estimate_price, Params}, _From, State) ->
         <<"to_latitude">> => EndLat,
         <<"to_longitude">> => EndLng,
         <<"car_type">> => <<"2,3,5,7,14,15">>,  % 支持多种车型
-        <<"city_code">> => maps:get(<<"city_code">>, State, <<"010">>),  % 默认北京
+        <<"city_code">> => maps:get(<<"city_code">>, Config, <<"010">>),  % 默认北京
         <<"order_type">> => <<"1">>  % 实时单
     },
 
@@ -99,35 +98,28 @@ handle_call({estimate_price, Params}, _From, State) ->
                 #{<<"code">> := 200, <<"data">> := Data, <<"success">> := true} ->
                     % 提取车型和价格信息
                     CarTypes = extract_car_types(Data),
-                    {reply, {ok, CarTypes}, State};
+                    {ok, CarTypes};
                 #{<<"code">> := Code, <<"message">> := Message} ->
                     % 处理API返回的错误信息
-                    {reply, {error, {api_error, Code, Message}}, State};
+                    {error, {api_error, Code, Message}};
                 OtherResponse ->
                     % 处理其他未知格式的响应
                     logger:error("未知响应格式: ~p", [OtherResponse]),
-                    {reply, {error, {unknown_response_format, OtherResponse}}, State}
+                    {error, {unknown_response_format, OtherResponse}}
             catch
                 Type:Reason:Stack ->
                     % 记录错误日志
                     logger:error("invalid_response: ~p:~p~n~p", [Type, Reason, Stack]),
-                    {reply, {error, invalid_response}, State}
+                    {error, invalid_response}
             end;
         {ok, StatusCode, _} ->
-            {reply, {error, {http_error, StatusCode}}, State};
+            {error, {http_error, StatusCode}};
         {error, Reason} ->
-            {reply, {error, {request_failed, Reason}}, State}
-    end;
+            {error, {request_failed, Reason}}
+    end.
 
-handle_call(_Request, _From, State) ->
-    {reply, {error, unknown_call}, State}.
-
-%% @doc 处理异步调用
-handle_cast(_Request, State) ->
-    {noreply, State}.
-
-%% @doc 处理信息
-handle_info(refresh_config, State) ->
+%% @doc 刷新配置
+refresh_config() ->
     % 从Redis直接加载配置
     ProviderKey = <<"provider:caocao">>,
     case redis_client:get(ProviderKey) of
@@ -137,7 +129,8 @@ handle_info(refresh_config, State) ->
                 Config = jsx:decode(ConfigJson, [return_maps]),
                 % 更新状态
                 logger:notice("已加载曹操配置: ~p", [Config]),
-                {noreply, maps:merge(State, Config)}
+                ets:insert(provider_config, {caocao, Config}),
+                {ok, Config}
             catch
                 Type:Reason:Stack ->
                     % 记录错误日志
@@ -145,30 +138,22 @@ handle_info(refresh_config, State) ->
                         "解析曹操配置失败: ~p:~p~n~p",
                         [Type, Reason, Stack]
                     ),
-                    % 设置定时器稍后重试
-                    erlang:send_after(5000, self(), refresh_config),
-                    {noreply, State}
+                    {error, {parse_error, Reason}}
             end;
         {error, Reason} ->
             % 记录错误日志
             logger:error("获取曹操配置失败: ~p", [Reason]),
-            % 设置定时器稍后重试
-            erlang:send_after(5000, self(), refresh_config),
-            {noreply, State}
-    end;
+            {error, Reason}
+    end.
 
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-%% @doc 终止服务器
-terminate(_Reason, _State) ->
-    % 从提供商管理器注销
-    gen_server:cast(provider_manager, {unregister_provider, ?MODULE}),
-    ok.
-
-%% @doc 代码更新
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+%% @doc 获取配置
+get_config() ->
+    case ets:lookup(provider_config, caocao) of
+        [{caocao, Config}] ->
+            {ok, Config};
+        [] ->
+            refresh_config()
+    end.
 
 %%====================================================================
 %% 内部函数

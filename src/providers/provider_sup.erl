@@ -1,14 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% 运力提供商监督者
-%%% 负责监督运力提供商管理器和各个运力提供商进程
+%%% 负责监督运力提供商管理器进程
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_sup).
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_provider/1, stop_provider/1]).
+-export([start_link/0]).
 
 %% 监督者回调函数
 -export([init/1]).
@@ -20,32 +20,6 @@
 %% @doc 启动监督者
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-
-%% @doc 启动一个运力提供商
-%% 动态添加一个运力提供商子进程
-start_provider(ProviderModule) ->
-    % 创建子进程规范
-    ChildSpec = #{
-        id => ProviderModule,
-        start => {ProviderModule, start_link, []},
-        restart => permanent,
-        shutdown => 5000,
-        type => worker,
-        modules => [ProviderModule]
-    },
-    % 动态添加子进程
-    supervisor:start_child(?MODULE, ChildSpec).
-
-%% @doc 停止一个运力提供商
-%% 动态移除一个运力提供商子进程
-stop_provider(ProviderModule) ->
-    % 终止并移除子进程
-    case supervisor:terminate_child(?MODULE, ProviderModule) of
-        ok ->
-            supervisor:delete_child(?MODULE, ProviderModule);
-        Error ->
-            Error
-    end.
 
 %%====================================================================
 %% 监督者回调函数
