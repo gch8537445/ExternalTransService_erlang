@@ -34,7 +34,7 @@ self_calc_prices(Start, End, UserId) ->
     RulesRef = make_ref(),
     spawn_link(
         fun() ->
-            Result = pricing_rules_service:get_pricing_rules(UserId),
+            Result = price_rules_service:get_price_rules(UserId),
             Parent ! {RulesRef, Result}
         end
     ),

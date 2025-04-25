@@ -4,10 +4,10 @@
 %%% 负责获取和管理计费规则
 %%% @end
 %%%-------------------------------------------------------------------
--module(pricing_rules_service).
+-module(price_rules_service).
 
 %% API
--export([get_pricing_rules/1, get_rule_by_trans_code/1]).
+-export([get_price_rules/1]).
 
 %%====================================================================
 %% API 函数
@@ -15,7 +15,7 @@
 
 %% @doc 获取计费规则
 %% 根据用户ID获取适用的计费规则
-get_pricing_rules(UserId) ->
+get_price_rules(UserId) ->
     % 从Redis获取用户配置
     case user_service:get_user_config(UserId) of
         {ok, UserConfig} ->
@@ -36,35 +36,6 @@ get_pricing_rules(UserId) ->
             {error, Reason}
     end.
 
-%% @doc 根据ipath_trans_code获取计费规则
-%% 从Redis获取指定ipath_trans_code的计费规则
-get_rule_by_trans_code(TransCode) when is_integer(TransCode) ->
-    % 转换为二进制
-    get_rule_by_trans_code(integer_to_binary(TransCode));
-get_rule_by_trans_code(TransCode) when is_binary(TransCode) ->
-    % 构建Redis键
-    Key = <<"pricing_rule_trans:", TransCode/binary>>,
-
-    % 从Redis获取计费规则
-    case redis_client:get(Key) of
-        {ok, RuleJson} ->
-            try jsx:decode(RuleJson, [return_maps]) of
-                Rule -> {ok, Rule}
-            catch
-                Type:Error:Stack -> 
-                    logger:error("计费规则解析失败 [TransCode: ~p]: ~p:~p~n~p", 
-                        [TransCode, Type, Error, Stack]),
-                    {error, invalid_rule_format}
-            end;
-        {error, not_found} ->
-            % 如果找不到规则，直接返回错误
-            logger:error("找不到计费规则 [TransCode: ~p]", [TransCode]),
-            {error, {rule_not_found, TransCode}};
-        {error, Reason} ->
-            logger:error("获取计费规则失败 [TransCode: ~p]: ~p", [TransCode, Reason]),
-            {error, Reason}
-    end.
-
 %%====================================================================
 %% 内部函数
 %%====================================================================
@@ -77,7 +48,7 @@ get_rules_for_trans_codes(TransCodes) ->
         Rules = lists:map(
             fun(TransCode) ->
                 % 获取计费规则
-                case get_rule_by_trans_code(TransCode) of
+                case get_rule_by_trans_code(integer_to_binary(TransCode)) of
                     {ok, Rule} -> 
                         Rule;
                     {error, Reason} -> 
@@ -92,5 +63,31 @@ get_rules_for_trans_codes(TransCodes) ->
     catch
         throw:{error, Reason} ->
             logger:error("获取多个计费规则时失败: ~p", [Reason]),
+            {error, Reason}
+    end.
+
+%% @doc 根据ipath_trans_code获取计费规则
+%% 从Redis获取指定ipath_trans_code的计费规则
+get_rule_by_trans_code(TransCode) ->
+    % 构建Redis键
+    Key = <<"pricing_rule_trans:", TransCode/binary>>,
+
+    % 从Redis获取计费规则
+    case redis_client:get(Key) of
+        {ok, RuleJson} ->
+            try jsx:decode(RuleJson, [return_maps]) of
+                Rule -> {ok, Rule}
+            catch
+                Type:Error:Stack ->
+                    logger:error("计费规则解析失败 [TransCode: ~p]: ~p:~p~n~p",
+                        [TransCode, Type, Error, Stack]),
+                    {error, invalid_rule_format}
+            end;
+        {error, not_found} ->
+            % 如果找不到规则，直接返回错误
+            logger:error("找不到计费规则 [TransCode: ~p]", [TransCode]),
+            {error, {rule_not_found, TransCode}};
+        {error, Reason} ->
+            logger:error("获取计费规则失败 [TransCode: ~p]: ~p", [TransCode, Reason]),
             {error, Reason}
     end.
