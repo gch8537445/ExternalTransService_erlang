@@ -1,5 +1,5 @@
 {application, external_trans_service, [
-    {description, "外部运力服务 - 企业用户cowboy服务后端"},
+    {description, "运力服务"},
     {vsn, "0.1.0"},
     {registered, []},
     {mod, {external_trans_service, []}},
