@@ -3,7 +3,7 @@
 %%% 外部运力服务应用入口
 %%% @end
 %%%-------------------------------------------------------------------
--module(external_trans_app).
+-module(external_trans_service).
 -behaviour(application).
 
 %% 应用程序回调函数
@@ -34,7 +34,7 @@ start(_StartType, _StartArgs) ->
     ),
 
     % 启动顶级监督者
-    external_trans_sup:start_link().
+    external_trans_service_sup:start_link().
 
 %% @doc 停止应用程序
 stop(_State) ->

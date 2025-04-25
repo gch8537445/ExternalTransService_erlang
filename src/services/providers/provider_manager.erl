@@ -30,6 +30,7 @@
 %% 内部常量
 -define(ETS_TABLE, provider_config).
 -define(PROVIDER_KEY, provider).
+-define(PROVIDER_DIR, "src/services/providers/sub_providers"). %提供商目录
 
 %%====================================================================
 %% gen_server回调函数
@@ -139,35 +140,46 @@ load_provider(ProviderModule) ->
                 true ->
                     {error, provider_already_exists};
                 false ->
-                    % 确保模块已加载
-                    case code:ensure_loaded(ProviderModule) of
-                        {module, ProviderModule} ->
-                            % 模块已经加载，初始化提供者
-                            try
-                                % 调用提供者的init函数初始化
-                                case ProviderModule:init([]) of
-                                    {ok, _} ->
-                                        % 提供者初始化成功，将其添加到ETS表中
-                                        NewProviders = [ProviderModule | Providers],
-                                        ets:insert(?ETS_TABLE, {?PROVIDER_KEY, NewProviders}),
-                                        {ok, #{
-                                            message => <<"运力提供商加载成功"/utf8>>,
-                                            provider_module => ProviderModule
-                                        }};
-                                    {error, InitError} ->
-                                        {error, InitError}
-                                end
-                            catch
-                                Type:Error:Stack ->
-                                    logger:error(
-                                        "Provider ~p init failed: ~p:~p~n~p",
-                                        [ProviderModule, Type, Error, Stack]
-                                    ),
-                                    {error, {init_failed, Error}}
+                    AppDir = code:lib_dir(external_trans_service),
+                    SrcFile = filename:join([AppDir, ?PROVIDER_DIR, atom_to_list(ProviderModule) ++ ".erl"]),
+
+                    case compile:file(SrcFile, [binary]) of
+                        {ok, ProviderModule, Binary} ->
+                            % 确保模块已加载
+                            case code:load_binary(ProviderModule, SrcFile, Binary) of
+                                {module, ProviderModule} ->
+                                    % 模块已经加载，初始化提供者
+                                    try
+                                        % 调用提供者的init函数初始化
+                                        case ProviderModule:init([]) of
+                                            {ok, _} ->
+                                                % 提供者初始化成功，将其添加到ETS表中
+                                                NewProviders = [ProviderModule | Providers],
+                                                ets:insert(?ETS_TABLE, {?PROVIDER_KEY, NewProviders}),
+                                                {ok, #{
+                                                    message => <<"运力提供商加载成功"/utf8>>,
+                                                    provider_module => ProviderModule
+                                                }};
+                                            {error, InitError} ->
+                                                {error, InitError}
+                                        end
+                                    catch
+                                        Type:Error:Stack ->
+                                            logger:error(
+                                                "Provider ~p init failed: ~p:~p~n~p",
+                                                [ProviderModule, Type, Error, Stack]
+                                            ),
+                                            {error, {init_failed, Error}}
+                                    end;
+                                {error, LoadError} ->
+                                    % 模块加载失败
+                                    logger:error("LoadError-----------------------~p", [LoadError]),
+                                    {error, {module_load_failed, LoadError}}
                             end;
-                        {error, LoadError} ->
-                            % 模块加载失败
-                            {error, {module_load_failed, LoadError}}
+                        {error, CompileError} ->
+                            % 模块编译失败
+                            logger:error("CompileError-----------------------~p", [CompileError]),
+                            {error, {module_compile_failed, CompileError}}
                     end
             end
     end.
@@ -198,10 +210,8 @@ unload_provider(ProviderModule) ->
 
 %% @doc 加载所有运力提供商
 load_all_providers() ->
-    % 获取提供商目录
-    ProviderDir = "src/providers/sub_providers",
     % 遍历目录中的所有文件
-    case file:list_dir(ProviderDir) of
+    case file:list_dir(?PROVIDER_DIR) of
         {ok, Files} ->
             % 过滤出以_provider.erl结尾的文件
             ProviderFiles = lists:filter(

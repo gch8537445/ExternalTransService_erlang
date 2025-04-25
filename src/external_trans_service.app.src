@@ -2,7 +2,7 @@
     {description, "外部运力服务 - 企业用户cowboy服务后端"},
     {vsn, "0.1.0"},
     {registered, []},
-    {mod, {external_trans_app, []}},
+    {mod, {external_trans_service, []}},
     {applications, [
         kernel,
         stdlib,

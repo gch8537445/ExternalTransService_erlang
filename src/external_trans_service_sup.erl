@@ -4,7 +4,7 @@
 %%% 负责监督所有其他进程，确保应用程序的稳定性和容错性
 %%% @end
 %%%-------------------------------------------------------------------
--module(external_trans_sup).
+-module(external_trans_service_sup).
 -behaviour(supervisor).
 
 %% API
