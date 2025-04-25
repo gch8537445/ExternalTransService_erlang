@@ -4,35 +4,152 @@
 %%% 负责解析和计算计费规则中的公式
 %%% @end
 %%%-------------------------------------------------------------------
--module(formula_service).
+-module(self_calc_service).
 
 %% API
--export([self_calc_price/2]).
+-export([self_calc_prices/3]).
 
 %%====================================================================
 %% API 函数
 %%====================================================================
 
+%% @doc 计算预估价
+%% 使用自己的计算方式计算预估价
+self_calc_prices(Start, End, UserId) ->
+    % 并行执行两个操作：
+    % 1. 调用腾讯地图API获取行程距离和行程用时
+    % 2. 获取每个车型对应的计费规则的公式
+
+    % 创建进程获取地图数据
+    Parent = self(),
+    MapRef = make_ref(),
+    spawn_link(
+        fun() ->
+            Result = tencent_map_service:get_distance_duration(Start, End),
+            Parent ! {MapRef, Result}
+        end
+    ),
+
+    % 创建进程获取计费规则
+    RulesRef = make_ref(),
+    spawn_link(
+        fun() ->
+            Result = pricing_rules_service:get_pricing_rules(UserId),
+            Parent ! {RulesRef, Result}
+        end
+    ),
+
+    % 等待两个进程的结果
+    receive
+        {MapRef, {ok, MapData}} ->
+            % 地图数据获取成功，等待计费规则
+            receive
+                {RulesRef, {ok, PricingRules}} ->
+                    % 计费规则获取成功，计算预估价
+                    calculate_all_car_prices(MapData, PricingRules);
+                {RulesRef, {error, Reason}} ->
+                    % 计费规则获取失败
+                    {error, {pricing_rules_error, Reason}}
+            after 5000 ->
+                % 超时
+                {error, pricing_rules_timeout}
+            end;
+        {MapRef, {error, Reason}} ->
+            % 地图数据获取失败
+            {error, {map_error, Reason}}
+    after 5000 ->
+        % 超时
+        {error, map_timeout}
+    end.
+
+%%====================================================================
+%% 内部函数
+%%====================================================================
+
+%% @doc 计算所有车型的预估价
+%% 根据地图数据和计费规则计算所有车型的预估价
+calculate_all_car_prices(MapData, PricingRules) ->
+    % 提取距离和时间
+    Distance = maps:get(distance, MapData),  % 单位：米
+    Duration = maps:get(duration, MapData),  % 单位：秒
+
+    % 转换单位
+    DistanceKm = Distance / 1000,  % 转换为公里
+    DurationMin = Duration / 60,   % 转换为分钟
+
+    % 为每个车型计算价格
+    try
+        CarPrices = lists:map(
+            fun(Rule) ->
+                % 提取ipath_trans_code信息
+                TransCode = maps:get(<<"ipath_trans_code">>, Rule),
+                % 为了向后兼容，仍然提取car_type，但不再作为主要标识符
+                CarType = maps:get(<<"car_type">>, Rule, 0),
+
+                % 计算价格
+                {ok, Price, Details} = calculate_car_price_by_rule(
+                    Rule,
+                    #{
+                        <<"distance">> => DistanceKm,
+                        <<"duration">> => DurationMin
+                    }
+                ),
+
+                % 构建结果，使用ipath_trans_code作为主要标识符
+                #{
+                    ipath_trans_code => TransCode,
+                    car_type => CarType,  % 为了向后兼容保留
+                    price => Price,
+                    currency => <<"CNY">>,
+                    details => Details,
+                    distance => Distance,
+                    duration => Duration
+                }
+            end,
+            PricingRules
+        ),
+
+        % 构建最终结果
+        Result = #{
+            prices => CarPrices,
+            map_info => #{
+                distance => Distance,
+                duration => Duration,
+                start_location => maps:get(start_location, MapData),
+                end_location => maps:get(end_location, MapData)
+            }
+        },
+
+        {ok, Result}
+    catch
+        Type:Reason:Stack ->
+            logger:error(
+                "Price calculation failed: ~p:~p~n~p",
+                [Type, Reason, Stack]
+            ),
+            {error, calculation_failed}
+    end.
+
 %% @doc 计算价格
 %% 根据计费规则和变量计算价格
-self_calc_price(Rule, Variables) ->
+calculate_car_price_by_rule(Rule, Variables) ->
     % 提取公式模板
     FormulaTemplate = maps:get(<<"formula_template">>, Rule, <<"">>),
-    
+
     % 提取费用项
     FeeItems = maps:get(<<"fee_items">>, Rule, []),
-    
+
     % 构建变量映射
     VariableMap = build_variable_map(FeeItems, Variables),
-    
+
     % 替换公式中的变量
     try
         % 解析公式
         {Formula, Details} = parse_formula(FormulaTemplate, VariableMap),
-        
+
         % 计算公式
         Result = calculate_formula(Formula),
-        
+
         % 返回结果
         {ok, Result, Details}
     catch
@@ -40,15 +157,11 @@ self_calc_price(Rule, Variables) ->
             {error, Reason};
         Type:Reason:Stack ->
             logger:error(
-                "Formula calculation failed: ~p:~p~n~p", 
+                "Formula calculation failed: ~p:~p~n~p",
                 [Type, Reason, Stack]
             ),
             {error, formula_error}
     end.
-
-%%====================================================================
-%% 内部函数
-%%====================================================================
 
 %% @doc 构建变量映射
 %% 将费用项和其他变量合并成一个映射

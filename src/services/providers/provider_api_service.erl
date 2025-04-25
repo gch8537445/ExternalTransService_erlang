@@ -8,17 +8,15 @@
 
 %% API
 -export([
-    estimate_price/3
+    provider_calc_prices/3
 ]).
 
 %%====================================================================
 %% API 函数
 %%====================================================================
-
-%% @doc 调用所有运力提供商的预估价接口
--spec estimate_price(Start :: binary() | map(), End :: binary() | map(), UserId :: binary()) -> 
-    {ok, list()} | {error, term()}.
-estimate_price(Start, End, UserId) ->
+%% @doc 计算供应商预估价并格式化结果
+provider_calc_prices(Start, End, UserId) ->
+    % 调用provider_api_service获取所有提供商的预估价
     % 创建请求参数
     Params = #{
         start_location => Start,
@@ -30,13 +28,22 @@ estimate_price(Start, End, UserId) ->
     case provider_manager_service:get_all_providers() of
         {ok, Providers} when length(Providers) > 0 ->
             % 并行发送请求给所有提供商
-            Results = pmap(
+            ProviderResults = pmap(
                 fun(ProviderModule) ->
                     call_provider_estimate(ProviderModule, Params)
                 end,
                 Providers
             ),
-            {ok, Results};
+            % 构建结果
+            Result = #{
+                provider_prices => ProviderResults,
+                request_info => #{
+                    start_location => Start,
+                    end_location => End,
+                    user_id => UserId
+                }
+            },
+            {ok, Result};
         {ok, []} ->
             {error, no_provider_available};
         Error ->
@@ -48,8 +55,6 @@ estimate_price(Start, End, UserId) ->
 %%====================================================================
 
 %% @doc 调用单个提供商的预估价接口
--spec call_provider_estimate(ProviderModule :: atom(), Params :: map()) -> 
-    {atom(), term()} | {atom(), {error, term()}}.
 call_provider_estimate(ProviderModule, Params) ->
     try
         % 直接调用提供者模块的estimate_price函数
@@ -72,7 +77,6 @@ call_provider_estimate(ProviderModule, Params) ->
 
 %% @doc 并行映射函数
 %% 并行执行函数F在列表L的每个元素上
--spec pmap(F :: fun((term()) -> term()), L :: list()) -> list().
 pmap(F, L) ->
     Parent = self(),
     Refs = lists:map(
@@ -97,10 +101,3 @@ pmap(F, L) ->
         end,
         Refs
     ).
-
-%% @doc 过滤结果
--spec filter_results(Results :: list()) -> list().
-filter_results(Results) ->
-    % 这里可以实现自定义的结果过滤逻辑
-    % 例如去除错误结果，排序等
-    Results. 
