@@ -31,13 +31,13 @@ handle_request(<<"POST">>, Req0) ->
         % 处理不同的操作
         Response = case Operation of
             <<"load_provider">> ->
-                provider_manager:load_provider(binary_to_atom(maps:get(<<"provider_module">>, RequestData, undefined), utf8));
+                provider_manager_service:load_provider(binary_to_atom(maps:get(<<"provider_module">>, RequestData, undefined), utf8));
             <<"unload_provider">> ->
-                provider_manager:unload_provider(binary_to_atom(maps:get(<<"provider_module">>, RequestData, undefined), utf8));
+                provider_manager_service:unload_provider(binary_to_atom(maps:get(<<"provider_module">>, RequestData, undefined), utf8));
             <<"list_providers">> ->
-                provider_manager:get_all_providers();
+                provider_manager_service:get_all_providers();
             <<"reload_all_providers">> ->
-                provider_manager:load_all_providers();
+                provider_manager_service:load_all_providers();
             _ ->
                 {error, invalid_operation}
         end,
@@ -72,7 +72,7 @@ handle_request(<<"POST">>, Req0) ->
 
 handle_request(<<"GET">>, Req) ->
     % 列出所有提供商
-    Response = provider_manager:get_all_providers(),
+    Response = provider_manager_service:get_all_providers(),
 
     % 生成响应
     case Response of

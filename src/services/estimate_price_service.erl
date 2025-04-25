@@ -150,10 +150,10 @@ calculate_prices(MapData, PricingRules) ->
     end.
 
 %% @doc 调用运力提供商的预估价接口
-%% 通过provider_manager调用所有运力提供商的预估价接口
+%% 通过provider_manager_service调用所有运力提供商的预估价接口
 call_provider_price(Start, End, UserId) ->
-    % 调用provider_manager获取所有提供商的预估价
-    case provider_manager:estimate_price(Start, End, UserId) of
+    % 调用provider_manager_service获取所有提供商的预估价
+    case provider_manager_service:estimate_price(Start, End, UserId) of
         {ok, ProviderResults} ->
             % 构建结果
             Result = #{

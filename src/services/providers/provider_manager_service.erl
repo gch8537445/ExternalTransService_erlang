@@ -4,7 +4,7 @@
 %%% 管理所有运力提供商，提供统一的接口给其他模块调用
 %%% @end
 %%%-------------------------------------------------------------------
--module(provider_manager).
+-module(provider_manager_service).
 -behaviour(gen_server).
 
 %% gen_server回调函数

@@ -73,20 +73,20 @@ init([]) ->
         modules => [poolboy]
     },
 
-    % 运力提供商监督者
-    ProviderSupSpec = #{
-        id => provider_sup,
-        start => {provider_sup, start_link, []},
+    % 运力提供商管理器
+    ProviderManagerSpec = #{
+        id => provider_manager_service,
+        start => {provider_manager_service, start_link, []},
         restart => permanent,
         shutdown => 5000,
-        type => supervisor,
-        modules => [provider_sup]
+        type => worker,
+        modules => [provider_manager_service]
     },
 
     % 定义子进程列表
     ChildSpecs = [
         RedisPoolSpec,
-        ProviderSupSpec
+        ProviderManagerSpec
     ],
 
     % 返回监督者规范
