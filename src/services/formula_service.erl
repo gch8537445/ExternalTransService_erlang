@@ -7,7 +7,7 @@
 -module(formula_service).
 
 %% API
--export([calculate_price/2]).
+-export([self_calc_price/2]).
 
 %%====================================================================
 %% API 函数
@@ -15,7 +15,7 @@
 
 %% @doc 计算价格
 %% 根据计费规则和变量计算价格
-calculate_price(Rule, Variables) ->
+self_calc_price(Rule, Variables) ->
     % 提取公式模板
     FormulaTemplate = maps:get(<<"formula_template">>, Rule, <<"">>),
     

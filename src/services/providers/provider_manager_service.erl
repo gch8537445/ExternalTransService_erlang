@@ -21,7 +21,6 @@
 %% API
 -export([
     get_all_providers/0,
-    estimate_price/3,
     load_provider/1,
     unload_provider/1,
     load_all_providers/0
@@ -84,46 +83,6 @@ get_all_providers() ->
         [] ->
             {ok, []}
     end.
-
-%% @doc 调用所有运力提供商的预估价接口
-estimate_price(Start, End, UserId) ->
-    % 创建请求参数
-    Params = #{
-        start_location => Start,
-        end_location => End,
-        user_id => UserId
-    },
-
-    % 获取提供商列表
-    {ok, Providers} = get_all_providers(),
-    
-    % 并行发送请求
-    Results = pmap(
-        fun(ProviderModule) ->
-            try
-                % 直接调用提供者模块的estimate_price函数
-                case ProviderModule:estimate_price(Params) of
-                    {ok, Result} ->
-                        {ProviderModule, Result};
-                    {error, Reason} ->
-                        {ProviderModule, {error, Reason}}
-                end
-            catch
-                exit:{timeout, _} ->
-                    {ProviderModule, {error, timeout}};
-                Type:ErrorReason:Stack ->
-                    logger:error(
-                        "Provider ~p estimate failed: ~p:~p~n~p",
-                        [ProviderModule, Type, ErrorReason, Stack]
-                    ),
-                    {ProviderModule, {error, internal_error}}
-            end
-        end,
-        Providers
-    ),
-
-    % 构建结果
-    {ok, Results}.
 
 %% @doc 动态加载一个运力提供商
 %% ProviderModule: 运力提供商代码模块名
@@ -279,32 +238,3 @@ load_all_providers() ->
             logger:error("无法读取提供商目录: ~p", [Reason]),
             {error, {read_dir_failed, Reason}}
     end.
-
-%%====================================================================
-%% 内部函数
-%%====================================================================
-
-%% @doc 并行映射函数
-%% 并行执行函数F在列表L的每个元素上
-pmap(F, L) ->
-    Parent = self(),
-    Refs = lists:map(
-        fun(X) ->
-            Ref = make_ref(),
-            spawn_link(
-                fun() ->
-                    Parent ! {Ref, F(X)}
-                end
-            ),
-            Ref
-        end,
-        L
-    ),
-    lists:map(
-        fun(Ref) ->
-            receive
-                {Ref, Result} -> Result
-            end
-        end,
-        Refs
-    ).

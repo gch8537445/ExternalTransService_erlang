@@ -23,10 +23,10 @@ estimate_price(Start, End, UserId) ->
             case maps:get(<<"estimate_calc_type">>, UserConfig, 0) of
                 0 ->
                     % 0, 使用自己的计算方式
-                    calculate_price(Start, End, UserId);
+                    self_calc_price(Start, End, UserId);
                 1 ->
                     % 1, 调用运力提供商的预估价接口
-                    call_provider_price(Start, End, UserId)
+                    provider_calc_price(Start, End, UserId)
             end;
         {error, Reason} ->
             {error, Reason}
@@ -38,7 +38,7 @@ estimate_price(Start, End, UserId) ->
 
 %% @doc 计算预估价
 %% 使用自己的计算方式计算预估价
-calculate_price(Start, End, UserId) ->
+self_calc_price(Start, End, UserId) ->
     % 并行执行两个操作：
     % 1. 调用腾讯地图API获取行程距离和行程用时
     % 2. 获取每个车型对应的计费规则的公式
@@ -69,7 +69,7 @@ calculate_price(Start, End, UserId) ->
             receive
                 {RulesRef, {ok, PricingRules}} ->
                     % 计费规则获取成功，计算预估价
-                    calculate_prices(MapData, PricingRules);
+                    self_calc_prices(MapData, PricingRules);
                 {RulesRef, {error, Reason}} ->
                     % 计费规则获取失败
                     {error, {pricing_rules_error, Reason}}
@@ -87,7 +87,7 @@ calculate_price(Start, End, UserId) ->
 
 %% @doc 计算所有车型的预估价
 %% 根据地图数据和计费规则计算所有车型的预估价
-calculate_prices(MapData, PricingRules) ->
+self_calc_prices(MapData, PricingRules) ->
     % 提取距离和时间
     Distance = maps:get(distance, MapData),  % 单位：米
     Duration = maps:get(duration, MapData),  % 单位：秒
@@ -106,7 +106,7 @@ calculate_prices(MapData, PricingRules) ->
                 CarType = maps:get(<<"car_type">>, Rule, 0),
 
                 % 计算价格
-                {ok, Price, Details} = formula_service:calculate_price(
+                {ok, Price, Details} = formula_service:self_calc_price(
                     Rule,
                     #{
                         <<"distance">> => DistanceKm,
@@ -150,10 +150,9 @@ calculate_prices(MapData, PricingRules) ->
     end.
 
 %% @doc 调用运力提供商的预估价接口
-%% 通过provider_manager_service调用所有运力提供商的预估价接口
-call_provider_price(Start, End, UserId) ->
-    % 调用provider_manager_service获取所有提供商的预估价
-    case provider_manager_service:estimate_price(Start, End, UserId) of
+provider_calc_price(Start, End, UserId) ->
+    % 调用provider_api_service获取所有提供商的预估价
+    case provider_api_service:estimate_price(Start, End, UserId) of
         {ok, ProviderResults} ->
             % 构建结果
             Result = #{
