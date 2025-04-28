@@ -9,7 +9,8 @@
 %% 导出函数
 -export([
     init/1,
-    estimate_price/1
+    estimate_price/1,
+    create_order/1
 ]).
 
 %%====================================================================
@@ -51,60 +52,67 @@ estimate_price(Params) ->
         <<"from_longitude">> => StartLng,
         <<"to_latitude">> => EndLat,
         <<"to_longitude">> => EndLng,
-        <<"car_type">> => <<"2,3,5,7,14,15">>,  % 支持多种车型
-        <<"city_code">> => maps:get(<<"city_code">>, Config, <<"010">>),  % 默认北京
-        <<"order_type">> => <<"1">>  % 实时单
+        <<"car_type">> => <<"2,3,5,7">>,  % 支持多种车型
+        <<"city_code">> => maps:get(<<"city_code">>, Config, <<"0411">>),
+        <<"order_type">> => <<"1">>,  % 实时单
+        <<"sign_key">> => SignKey
     },
 
-    % 计算签名
-    Sign = calculate_sign(RequestParams,#{<<"sign_key">> => SignKey}),
-    RequestParamsWithSign = RequestParams#{<<"sign">> => Sign},
+    case make_request(get, <<Domain/binary, "/v2/common/estimatePriceWithDetail?">>, RequestParams) of
+        {ok, Data} ->
+            % 提取车型和价格信息
+            CarTypes = extract_car_types(Data),
+            {ok, CarTypes};
 
-    % 构建查询字符串
-    QueryString = maps:fold(
-        fun(Key, Value, Acc) ->
-            KeyStr = binary_to_list(Key),
-            ValueStr = binary_to_list(Value),
-            Encoded = KeyStr ++ "=" ++ uri_string:quote(ValueStr),
-            case Acc of
-                "" -> Encoded;
-                _ -> Acc ++ "&" ++ Encoded
-            end
-        end,
-        "",
-        RequestParamsWithSign
-    ),
-
-    % 发送GET请求
-    UrlWithParams = <<Domain/binary, "/v2/common/estimatePriceWithDetail?", (list_to_binary(QueryString))/binary>>,
-    logger:notice("曹操预估请求URL: ~p", [UrlWithParams]),
-    
-    case http_client:get(UrlWithParams) of
-        {ok, 200, ResponseBody} ->
-            % 解析响应
-            try jsx:decode(ResponseBody, [return_maps]) of
-                #{<<"code">> := 200, <<"data">> := Data, <<"success">> := true} ->
-                    % 提取车型和价格信息
-                    CarTypes = extract_car_types(Data),
-                    {ok, CarTypes};
-                #{<<"code">> := Code, <<"message">> := Message} ->
-                    % 处理API返回的错误信息
-                    {error, {api_error, Code, Message}};
-                OtherResponse ->
-                    % 处理其他未知格式的响应
-                    logger:error("未知响应格式: ~p", [OtherResponse]),
-                    {error, {unknown_response_format, OtherResponse}}
-            catch
-                Type:Reason:Stack ->
-                    % 记录错误日志
-                    logger:error("invalid_response: ~p:~p~n~p", [Type, Reason, Stack]),
-                    {error, invalid_response}
-            end;
-        {ok, StatusCode, _} ->
-            {error, {http_error, StatusCode}};
         {error, Reason} ->
             {error, {request_failed, Reason}}
     end.
+
+%% 发起叫车请求
+create_order(Params) ->
+    {ok, Config} = get_config(),
+    Url = binary_to_list(maps:get(<<"CAOCAO_DOMAIN">>, Config)) ++ "/v2/common/orderCar?",
+
+    % 构造基本参数
+    BaseParams = #{
+        <<"client_id">> => maps:get(<<"CAOCAO_CLIENT_ID">>, Config),
+        <<"from_latitude">> => maps:get(from_latitude, Params),
+        <<"from_longitude">> => maps:get(from_longitude, Params),
+        <<"to_latitude">> => maps:get(to_latitude, Params),
+        <<"to_longitude">> => maps:get(to_longitude, Params),
+        <<"car_type">> => maps:get(car_type, Params),
+        <<"ext_order_id">> => maps:get(ext_order_id, Params),
+        <<"city_code">> => maps:get(city_code, Params),
+        <<"order_type">> => maps:get(order_type, Params, <<"1">>),
+        <<"sign_key">> => maps:get(<<"CAOCAO_SIGN_KEY">>, Config)
+    },
+
+    OptionalFields = [
+        {passenger_phone, <<"passenger_phone">>},
+        {passenger_name, <<"passenger_name">>},
+        {caller_phone, <<"caller_phone">>},
+        {estimate_price, <<"estimate_price">>},
+        {estimate_price_key, <<"estimate_price_key">>},
+        {departure_time, <<"departure_time">>},
+        {start_name, <<"start_name">>},
+        {start_address, <<"start_address">>},
+        {end_name, <<"end_name">>},
+        {end_address, <<"end_address">>},
+        {order_latitude, <<"order_latitude">>},
+        {order_longitude, <<"order_longitude">>},
+        {sms_policy, <<"sms_policy">>},
+        {flight_no, <<"flight_no">>},
+        {flight_departure_time, <<"flt_takeoff_time">>},
+        {dynamic_rule_id, <<"dynamic_rule_id">>},
+        {hide_phone, <<"passenger_hide_phone">>},
+        {start_poi_id, <<"start_poi_id">>},
+        {end_poi_id, <<"end_poi_id">>},
+        {accept_cp_driver, <<"accept_cp_driver">>}
+    ],
+
+    % 添加其他可选参数
+    FullParams = add_optional_params(BaseParams, OptionalFields, Params),
+    make_request(post, Url, FullParams).
 
 %%====================================================================
 %% 内部函数
@@ -182,6 +190,7 @@ extract_car_types(Data) ->
             % 提取车型信息
             CarType = maps:get(<<"carType">>, Car, 0),
             CarName = maps:get(<<"name">>, Car, <<>>),
+            PriceKey = maps:get(<<"priceKey">>, Car, []),
             Price = maps:get(<<"price">>, Car, 0),
             OriginPrice = maps:get(<<"originPrice">>, Car, 0),
             Distance = maps:get(<<"distance">>, Car, 0),
@@ -215,3 +224,84 @@ extract_car_types(Data) ->
         end,
         CarList
     ).
+
+%% 通用请求函数
+make_request(Method, Url, Params) ->
+    % 添加签名
+    ParamsWithoutKey = maps:remove(<<"sign_key">>, Params),
+    Sign = calculate_sign(ParamsWithoutKey, #{<<"sign_key">> => maps:get(<<"sign_key">>, Params)}),
+    ParamsWithSign = ParamsWithoutKey#{<<"sign">> => Sign},
+
+    % 构建URL或请求体
+    Request = case Method of
+                  get ->
+                      url_with_params(Url, ParamsWithSign);
+                  post ->
+                      {Url, jsx:encode(ParamsWithSign)}
+              end,
+
+    logger:notice("make_request ------ URL: ~p", [Request]),
+
+    % 发送请求
+    case apply_request(Method, Request) of
+        {ok, 200, ResponseBody} ->
+            try jsx:decode(ResponseBody, [return_maps]) of
+                #{<<"code">> := 200, <<"data">> := Data} ->
+                    {ok, Data};
+                #{<<"code">> := Code, <<"message">> := Message} ->
+                    {error, {api_error, Code, Message}};
+                _ ->
+                    {error, invalid_response}
+            catch
+                _:_ -> {error, invalid_response}
+            end;
+        {ok, StatusCode, _} ->
+            {error, {http_error, StatusCode}};
+        {error, Reason} ->
+            {error, {request_failed, Reason}}
+    end.
+
+%% 添加可选参数
+add_optional_params(BaseParams, OptionalFields, OrderParams) ->
+    lists:foldl(
+        fun({Key, ApiKey}, Acc) ->
+                case maps:find(Key, OrderParams) of
+                    {ok, Value} when Value =/= undefined, Value =/= "" ->
+                        maps:put(ApiKey, Value, Acc);
+                    _ ->
+                        Acc
+                end
+            end,
+        BaseParams,
+        OptionalFields
+    ).
+
+%% HTTP请求执行
+apply_request(get, Url) ->
+    http_client:get(Url);
+apply_request(post, {Url, Body}) ->
+    http_client:post(Url, Body).
+
+%% 构建带参数的URL
+url_with_params(Url, Params) ->
+    QueryString = maps:fold(
+        fun(Key, Value, Acc) ->
+            KeyStr = binary_to_list(Key),
+            ValueStr = to_string(Value),
+            Encoded = KeyStr ++ "=" ++ uri_string:quote(ValueStr),
+            case Acc of
+                "" -> Encoded;
+                _ -> Acc ++ "&" ++ Encoded
+            end
+        end,
+        "",
+        Params
+    ),
+    <<Url/binary, (list_to_binary(QueryString))/binary>>.
+
+%% 转换为字符串
+to_string(V) when is_binary(V) -> binary_to_list(V);
+to_string(V) when is_integer(V) -> integer_to_list(V);
+to_string(V) when is_float(V) -> float_to_list(V);
+to_string(V) when is_atom(V) -> atom_to_list(V);
+to_string(V) -> V.
