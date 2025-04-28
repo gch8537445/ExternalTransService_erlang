@@ -4,7 +4,7 @@
 %%% 处理预估价HTTP请求，解析请求参数，调用预估价服务，返回结果
 %%% @end
 %%%-------------------------------------------------------------------
--module(estimate_price_handler).
+-module(order_handler).
 -behavior(cowboy_handler).
 
 %% Cowboy回调函数
@@ -24,8 +24,11 @@ init(Req0, State) ->
         % 解析JSON请求体
         Params = jsx:decode(Body, [return_maps]),
 
-        % 调用估价服务
-        case estimate_price_service:estimate_price(Params) of
+        % 直接调用order_service
+        Response = order_service:create_order(Params),
+
+        % 生成响应
+        case Response of
             {ok, Result} ->
                 Req2 = cowboy_req:reply(200, #{
                     <<"content-type">> => <<"application/json">>
@@ -44,25 +47,25 @@ init(Req0, State) ->
                 {ok, Req2, State}
         end
     catch
-        error:badarg ->
+        _:badarg ->
             % 处理JSON解析错误
-            Req3 = cowboy_req:reply(400, #{
+            JSXError = cowboy_req:reply(400, #{
                 <<"content-type">> => <<"application/json">>
             }, jsx:encode(#{
                 success => false,
                 error => invalid_json_format
             }), Req1),
-            {ok, Req3, State};
-        _:Reason1 ->
+            {ok, JSXError, State};
+        _:OtherReason ->
             % 处理其他错误
-            error_logger:error_msg("预估价处理出错: ~p~n", [Reason1]),
-            Req4 = cowboy_req:reply(500, #{
+            error_logger:error_msg("订单处理出错: ~p~n", [OtherReason]),
+            OtherError = cowboy_req:reply(500, #{
                 <<"content-type">> => <<"application/json">>
             }, jsx:encode(#{
                 success => false,
                 error => internal_server_error
             }), Req1),
-            {ok, Req4, State}
+            {ok, OtherError, State}
     end.
 
 %% @doc 终止处理器

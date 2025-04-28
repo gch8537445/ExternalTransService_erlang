@@ -8,21 +8,15 @@
 
 %% API
 -export([
-    provider_calc_prices/3
+    provider_calc_prices/1
 ]).
 
 %%====================================================================
 %% API 函数
 %%====================================================================
 %% @doc 计算供应商预估价并格式化结果
-provider_calc_prices(Start, End, UserId) ->
+provider_calc_prices(Params) ->
     % 调用provider_api_service获取所有提供商的预估价
-    % 创建请求参数
-    Params = #{
-        start_location => Start,
-        end_location => End,
-        user_id => UserId
-    },
 
     % 获取提供商列表
     case provider_manager_service:get_all_providers() of
@@ -35,15 +29,7 @@ provider_calc_prices(Start, End, UserId) ->
                 Providers
             ),
             % 构建结果
-            Result = #{
-                provider_prices => ProviderResults,
-                request_info => #{
-                    start_location => Start,
-                    end_location => End,
-                    user_id => UserId
-                }
-            },
-            {ok, Result};
+            {ok, ProviderResults};
         {ok, []} ->
             {error, no_provider_available};
         Error ->

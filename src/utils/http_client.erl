@@ -9,6 +9,7 @@
 %% API
 -export([
     get/1,
+    post/1,
     get/2,
     post/2,
     post/3,
@@ -28,6 +29,11 @@ get(Url) ->
 %% 使用指定的头部发送GET请求
 get(Url, Headers) ->
     request(get, Url, Headers, <<>>, []).
+
+%% @doc 发送POST请求
+%% 使用默认选项发送POST请求
+post(Url) ->
+    request(post, Url, [], <<>>, []).
 
 %% @doc 发送POST请求
 %% 使用默认选项发送POST请求，自动将Body编码为JSON

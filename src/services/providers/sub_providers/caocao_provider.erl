@@ -29,16 +29,16 @@ init([]) ->
 estimate_price(Params) ->
     % 获取配置
     {ok, Config} = get_config(),
-    
-    % 提取参数
-    Start = maps:get(start_location, Params),
-    End = maps:get(end_location, Params),
-    _UserId = maps:get(user_id, Params),
 
     % 获取配置
     Domain = maps:get(<<"CAOCAO_DOMAIN">>, Config),
     ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, Config),
     SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, Config),
+    Url = <<Domain/binary, "/v2/common/estimatePriceWithDetail?">>,
+
+    % 提取参数
+    Start = maps:get(<<"start_location">>, Params),
+    End = maps:get(<<"end_location">>, Params),
 
     % 构建请求参数
     [StartLat, StartLng] = binary:split(Start, <<",">>),
@@ -47,18 +47,18 @@ estimate_price(Params) ->
     % 构建请求体
     RequestParams = #{
         <<"client_id">> => ClientId,
+        <<"sign_key">> => SignKey,
         <<"timestamp">> => integer_to_binary(erlang:system_time(millisecond)),
         <<"from_latitude">> => StartLat,
         <<"from_longitude">> => StartLng,
         <<"to_latitude">> => EndLat,
         <<"to_longitude">> => EndLng,
-        <<"car_type">> => <<"2,3,5,7">>,  % 支持多种车型
+        <<"car_type">> => <<"2,3,5">>,
         <<"city_code">> => maps:get(<<"city_code">>, Config, <<"0411">>),
-        <<"order_type">> => <<"1">>,  % 实时单
-        <<"sign_key">> => SignKey
+        <<"order_type">> => <<"1">>
     },
 
-    case make_request(get, <<Domain/binary, "/v2/common/estimatePriceWithDetail?">>, RequestParams) of
+    case make_request(get, Url, RequestParams) of
         {ok, Data} ->
             % 提取车型和价格信息
             CarTypes = extract_car_types(Data),
@@ -71,43 +71,48 @@ estimate_price(Params) ->
 %% 发起叫车请求
 create_order(Params) ->
     {ok, Config} = get_config(),
-    Url = binary_to_list(maps:get(<<"CAOCAO_DOMAIN">>, Config)) ++ "/v2/common/orderCar?",
+    % 获取配置
+    Domain = maps:get(<<"CAOCAO_DOMAIN">>, Config),
+    ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, Config),
+    SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, Config),
+    Url = <<Domain/binary, "/v2/common/orderCar?">>,
 
     % 构造基本参数
     BaseParams = #{
-        <<"client_id">> => maps:get(<<"CAOCAO_CLIENT_ID">>, Config),
-        <<"from_latitude">> => maps:get(from_latitude, Params),
-        <<"from_longitude">> => maps:get(from_longitude, Params),
-        <<"to_latitude">> => maps:get(to_latitude, Params),
-        <<"to_longitude">> => maps:get(to_longitude, Params),
-        <<"car_type">> => maps:get(car_type, Params),
-        <<"ext_order_id">> => maps:get(ext_order_id, Params),
-        <<"city_code">> => maps:get(city_code, Params),
-        <<"order_type">> => maps:get(order_type, Params, <<"1">>),
-        <<"sign_key">> => maps:get(<<"CAOCAO_SIGN_KEY">>, Config)
+        <<"client_id">> => ClientId,
+        <<"sign_key">> => SignKey,
+        <<"timestamp">> => integer_to_binary(erlang:system_time(millisecond)),
+        <<"from_latitude">> => maps:get(<<"from_latitude">>, Params),
+        <<"from_longitude">> => maps:get(<<"from_longitude">>, Params),
+        <<"to_latitude">> => maps:get(<<"to_latitude">>, Params),
+        <<"to_longitude">> => maps:get(<<"to_longitude">>, Params),
+        <<"car_type">> => maps:get(<<"car_type">>, Params),
+        <<"ext_order_id">> => maps:get(<<"ext_order_id">>, Params),
+        <<"city_code">> => maps:get(<<"city_code">>, Params),
+        <<"order_type">> => maps:get(<<"order_type">>, Params)
     },
 
     OptionalFields = [
-        {passenger_phone, <<"passenger_phone">>},
-        {passenger_name, <<"passenger_name">>},
-        {caller_phone, <<"caller_phone">>},
-        {estimate_price, <<"estimate_price">>},
-        {estimate_price_key, <<"estimate_price_key">>},
-        {departure_time, <<"departure_time">>},
-        {start_name, <<"start_name">>},
-        {start_address, <<"start_address">>},
-        {end_name, <<"end_name">>},
-        {end_address, <<"end_address">>},
-        {order_latitude, <<"order_latitude">>},
-        {order_longitude, <<"order_longitude">>},
-        {sms_policy, <<"sms_policy">>},
-        {flight_no, <<"flight_no">>},
-        {flight_departure_time, <<"flt_takeoff_time">>},
-        {dynamic_rule_id, <<"dynamic_rule_id">>},
-        {hide_phone, <<"passenger_hide_phone">>},
-        {start_poi_id, <<"start_poi_id">>},
-        {end_poi_id, <<"end_poi_id">>},
-        {accept_cp_driver, <<"accept_cp_driver">>}
+        {<<"passenger_phone">>, <<"passenger_phone">>},
+        {<<"passenger_name">>, <<"passenger_name">>},
+        {<<"caller_phone">>, <<"caller_phone">>},
+        {<<"estimate_price">>, <<"estimate_price">>},
+        {<<"estimate_price_key">>, <<"estimate_price_key">>},
+        {<<"departure_time">>, <<"departure_time">>},
+        {<<"start_name">>, <<"start_name">>},
+        {<<"start_address">>, <<"start_address">>},
+        {<<"end_name">>, <<"end_name">>},
+        {<<"end_address">>, <<"end_address">>},
+        {<<"order_latitude">>, <<"order_latitude">>},
+        {<<"order_longitude">>, <<"order_longitude">>},
+        {<<"sms_policy">>, <<"sms_policy">>},
+        {<<"flight_no">>, <<"flight_no">>},
+        {<<"flight_departure_time">>, <<"flt_takeoff_time">>},
+        {<<"dynamic_rule_id">>, <<"dynamic_rule_id">>},
+        {<<"hide_phone">>, <<"passenger_hide_phone">>},
+        {<<"start_poi_id">>, <<"start_poi_id">>},
+        {<<"end_poi_id">>, <<"end_poi_id">>},
+        {<<"accept_cp_driver">>, <<"accept_cp_driver">>}
     ],
 
     % 添加其他可选参数
@@ -214,6 +219,7 @@ extract_car_types(Data) ->
                 provider => <<"caocao">>,
                 car_type => CarType,
                 car_name => CarName,
+                price_key => PriceKey,
                 price => Price,
                 original_price => OriginPrice,
                 currency => <<"CNY">>,
@@ -237,7 +243,10 @@ make_request(Method, Url, Params) ->
                   get ->
                       url_with_params(Url, ParamsWithSign);
                   post ->
-                      {Url, jsx:encode(ParamsWithSign)}
+                      % 对于POST请求，我们需要区别对待
+                      FormattedUrl = url_with_params(Url, ParamsWithSign),
+                      % 对于POST我们需要返回URL，不需要请求体，因为参数已经在URL中
+                      FormattedUrl
               end,
 
     logger:notice("make_request ------ URL: ~p", [Request]),
@@ -280,7 +289,10 @@ add_optional_params(BaseParams, OptionalFields, OrderParams) ->
 apply_request(get, Url) ->
     http_client:get(Url);
 apply_request(post, {Url, Body}) ->
-    http_client:post(Url, Body).
+    http_client:post(Url, Body);
+apply_request(post, Url) when is_binary(Url) ->
+    % 当 POST 请求只有 URL 没有请求体时
+    http_client:post(Url, <<>>).
 
 %% 构建带参数的URL
 url_with_params(Url, Params) ->

@@ -7,7 +7,7 @@
 -module(self_calc_service).
 
 %% API
--export([self_calc_prices/3]).
+-export([self_calc_prices/1]).
 
 %%====================================================================
 %% API 函数
@@ -15,7 +15,7 @@
 
 %% @doc 计算预估价
 %% 使用自己的计算方式计算预估价
-self_calc_prices(Start, End, UserId) ->
+self_calc_prices(Params) ->
     % 并行执行两个操作：
     % 1. 调用腾讯地图API获取行程距离和行程用时
     % 2. 获取每个车型对应的计费规则的公式
@@ -25,7 +25,8 @@ self_calc_prices(Start, End, UserId) ->
     MapRef = make_ref(),
     spawn_link(
         fun() ->
-            Result = tencent_map_service:get_distance_duration(Start, End),
+            Result = tencent_map_service:get_distance_duration(maps:get(<<"start_location">>, Params,
+                undefined),maps:get(<<"end_location">>, Params, undefined)),
             Parent ! {MapRef, Result}
         end
     ),
@@ -34,7 +35,7 @@ self_calc_prices(Start, End, UserId) ->
     RulesRef = make_ref(),
     spawn_link(
         fun() ->
-            Result = price_rules_service:get_price_rules(UserId),
+            Result = price_rules_service:get_price_rules(maps:get(<<"user_id">>, Params, undefined)),
             Parent ! {RulesRef, Result}
         end
     ),
