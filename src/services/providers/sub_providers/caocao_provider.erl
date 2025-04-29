@@ -58,14 +58,13 @@ estimate_price(Params) ->
         <<"order_type">> => <<"1">>
     },
 
-    case make_request(get, Url, RequestParams) of
-        {ok, Data} ->
+    Response = make_request(get, Url, RequestParams),
+    case Response of
+        {ok, 200, Data} ->
             % 提取车型和价格信息
-            CarTypes = extract_car_types(Data),
-            {ok, CarTypes};
-
-        {error, Reason} ->
-            {error, {request_failed, Reason}}
+            {ok, extract_car_types(maps:get(<<"data">>, Data))};
+        _ ->
+            Response
     end.
 
 %% 发起叫车请求
@@ -117,7 +116,13 @@ create_order(Params) ->
 
     % 添加其他可选参数
     FullParams = add_optional_params(BaseParams, OptionalFields, Params),
-    make_request(post, Url, FullParams).
+    Response = make_request(post, Url, FullParams),
+    case Response of
+        {ok, 200, Data} ->
+            {ok, Data};
+        _ ->
+        Response
+    end.
 
 %%====================================================================
 %% 内部函数
@@ -175,10 +180,7 @@ calculate_sign(Params, SignKey) ->
     list_to_binary([string:to_lower(io_lib:format("~2.16.0b", [X])) || <<X>> <= HashBin]).
 
 %% @doc 提取车型和价格信息
-extract_car_types(Data) ->
-    % 将Data作为车型列表直接处理
-    CarList = Data,
-
+extract_car_types(CarList) ->
     % 转换为标准格式
     lists:map(
         fun(Car) ->
@@ -227,28 +229,11 @@ make_request(Method, Url, Params) ->
     ParamsWithoutKey = maps:remove(<<"sign_key">>, Params),
     Sign = calculate_sign(ParamsWithoutKey, #{<<"sign_key">> => maps:get(<<"sign_key">>, Params)}),
     ParamsWithSign = ParamsWithoutKey#{<<"sign">> => Sign},
-
-    % 构建URL或请求体
-    Request = case Method of
-                  get ->
-                      url_with_params(Url, ParamsWithSign);
-                  post ->
-                      url_with_params(Url, ParamsWithSign)
-              end,
-
-    logger:notice("make_request ------ URL: ~p", [Request]),
-
-    % 发送请求
-    case apply_request(Method, Request) of
-        {ok, 200, ResponseBody} ->
-            case jsx:decode(ResponseBody, [return_maps]) of
-                #{<<"code">> := 200, <<"data">> := Data} ->
-                    {ok, Data};
-                ResponseMap ->
-                    {error, ResponseMap}
-            end;
-        {error, RequestError} ->
-            {error, RequestError}
+    case Method of
+        get ->
+            http_client:get(url_with_params(Url, ParamsWithSign));
+        post ->
+            http_client:post(url_with_params(Url, ParamsWithSign))
     end.
 
 %% 添加可选参数
@@ -266,17 +251,6 @@ add_optional_params(BaseParams, OptionalFields, OrderParams) ->
         OptionalFields
     ).
 
-%% HTTP请求执行
-apply_request(get, Url) ->
-    http_client:get(Url);
-apply_request(post, Url) ->
-    http_client:post(Url);
-apply_request(post, {Url, Body}) ->
-    http_client:post(Url, Body);
-apply_request(post, Url) when is_binary(Url) ->
-    % 当 POST 请求只有 URL 没有请求体时
-    http_client:post(Url, <<>>).
-
 %% 构建带参数的URL
 url_with_params(Url, Params) ->
     QueryString = maps:fold(
@@ -292,6 +266,7 @@ url_with_params(Url, Params) ->
         "",
         Params
     ),
+    logger:notice("URL ------ : ~p", [<<Url/binary, (list_to_binary(QueryString))/binary>>]),
     <<Url/binary, (list_to_binary(QueryString))/binary>>.
 
 %% 转换为字符串

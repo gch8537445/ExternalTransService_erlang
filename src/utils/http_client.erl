@@ -23,7 +23,7 @@
 %% @doc 发送GET请求
 %% 使用默认选项发送GET请求
 get(Url) ->
-    get(Url, []).
+    request(get, Url, [], <<>>, []).
 
 %% @doc 发送GET请求
 %% 使用指定的头部发送GET请求
@@ -38,22 +38,18 @@ post(Url) ->
 %% @doc 发送POST请求
 %% 使用默认选项发送POST请求，自动将Body编码为JSON
 post(Url, Body) ->
-    post(Url, Body, #{}).
+    request(post, Url, #{<<"Content-Type">> => <<"application/json">>}, jsx:encode(Body), []).
 
 %% @doc 发送POST请求
 %% 使用指定的头部发送POST请求，自动将Body编码为JSON
 post(Url, Body, Headers) ->
-    % 准备请求体
-    {ContentType, EncodedBody} = encode_body(Body),
-    
     % 合并头部
     MergedHeaders = maps:merge(
-        #{<<"Content-Type">> => ContentType},
+        #{<<"Content-Type">> => <<"application/json">>},
         Headers
     ),
-    
     % 发送请求
-    request(post, Url, MergedHeaders, EncodedBody, []).
+    request(post, Url, MergedHeaders, jsx:encode(Body), []).
 
 %% @doc 发送HTTP请求
 %% 使用hackney库发送HTTP请求
@@ -63,34 +59,16 @@ request(Method, Url, Headers, Body, Options) ->
     % 合并默认选项和hackney配置
     MergedOptions = HackneyConfig ++ Options,
     % 发送请求
-    case hackney:request(Method, Url, Headers, Body, MergedOptions) of
-        {ok, StatusCode, _RespHeaders, ClientRef} ->
+    ResponseBody = hackney:request(Method, Url, Headers, Body, MergedOptions),
+    case ResponseBody of
+        {ok, _StatusCode, _RespHeaders, ClientRef} ->
             % 读取响应体
             case hackney:body(ClientRef) of
-                {ok, RespBody} ->
-                    {ok, StatusCode, RespBody};
-                {error, Reason} ->
-                    {error, Reason}
+                {ok, Data} ->
+                    jsx:decode(Data, [return_maps]);
+                _ ->
+                    ResponseBody
             end;
-        {error, Reason} ->
-            {error, Reason}
+        _ -> % Handles {error, Reason} from hackney:request
+            ResponseBody
     end.
-
-%%====================================================================
-%% 内部函数
-%%====================================================================
-
-%% @doc 编码请求体
-%% 将请求体编码为适当的格式
-encode_body(Body) when is_map(Body) ->
-    % 将Map编码为JSON
-    {<<"application/json">>, jsx:encode(Body)};
-encode_body(Body) when is_binary(Body) ->
-    % 二进制数据，假设已经是正确格式
-    {<<"application/octet-stream">>, Body};
-encode_body(Body) when is_list(Body) ->
-    % 列表，转换为二进制
-    {<<"text/plain">>, list_to_binary(Body)};
-encode_body(_) ->
-    % 其他类型，使用空请求体
-    {<<"application/octet-stream">>, <<>>}.

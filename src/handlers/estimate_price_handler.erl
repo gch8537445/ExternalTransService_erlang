@@ -22,7 +22,7 @@ init(Req0, State) ->
     % 解析JSON请求体
     Params = jsx:decode(Body, [return_maps]),
     % 调用order_service
-    Response = order_service:create_order(Params),
+    Response = estimate_price_service:estimate_price(Params),
     % 生成响应
     case Response of
         {ok, Result} ->

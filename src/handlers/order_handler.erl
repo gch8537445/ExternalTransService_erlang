@@ -44,7 +44,7 @@ init(Req0, State) ->
             ErrorResponse = cowboy_req:reply(500, #{<<"content-type">> => <<"application/json">>},
                 jsx:encode(#{
                     success => false,
-                    error => internal_server_error
+                    error => Response
                 }), Req1),
             {ok, ErrorResponse, State}
     end.

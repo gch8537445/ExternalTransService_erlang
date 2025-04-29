@@ -43,19 +43,12 @@ provider_calc_prices(Params) ->
 %% @doc 调用单个提供商的预估价接口
 call_provider_estimate(ProviderModule, Params) ->
     % 直接调用提供者模块的estimate_price函数
-    case ProviderModule:estimate_price(Params) of
+    Result = ProviderModule:estimate_price(Params),
+    case Result of
         {ok, Result} ->
             {ProviderModule, Result};
-        {error, Reason} ->
-            {ProviderModule, {error, Reason}};
-        {'EXIT', {timeout, _}} ->
-            {ProviderModule, {error, timeout}};
-        {'EXIT', Reason} ->
-            logger:error(
-                "Provider ~p estimate failed: ~p",
-                [ProviderModule, Reason]
-            ),
-            {ProviderModule, {error, internal_error}}
+        _ ->
+            Result
     end.
 
 %% @doc 并行映射函数

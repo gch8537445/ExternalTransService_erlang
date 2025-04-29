@@ -10,7 +10,7 @@
 -export([get_distance_duration/2]).
 
 %% 内部导出函数，供测试使用
--export([parse_response/3, cache_result/3]).
+-export([cache_result/3]).
 
 %%====================================================================
 %% API 函数
@@ -20,7 +20,8 @@
 %% 调用腾讯地图API获取两点之间的驾车路线距离和时间
 get_distance_duration(Start, End) ->
     % 从应用配置获取腾讯地图API配置
-    case get_map_config() of
+    Response0 = get_map_config(),
+    case Response0 of
         {ok, Config} ->
             % 提取API URL和密钥, 转换为二进制格式
             % 构建请求URL
@@ -28,22 +29,27 @@ get_distance_duration(Start, End) ->
                 list_to_binary(proplists:get_value(api_url, Config)),
                 list_to_binary(proplists:get_value(key, Config))),
             % 发送请求
-            case http_client:get(Url) of
-                {ok, 200, ResponseBody} ->
-                    % 解析响应
-                    parse_response(ResponseBody, Start, End);
-                {ok, StatusCode, _} ->
-                    logger:error("腾讯地图API请求失败 [Start: ~p, End: ~p]: HTTP错误 ~p", 
-                        [Start, End, StatusCode]),
-                    {error, {http_error, StatusCode}};
-                {error, Reason} ->
-                    logger:error("腾讯地图API请求发送失败 [Start: ~p, End: ~p]: ~p", 
-                        [Start, End, Reason]),
-                    {error, {request_failed, Reason}}
+            Response1 = http_client:get(Url),
+            case Response1 of
+                #{<<"status">> := 0, <<"result">> := Result} ->
+                    % 提取路线信息
+                    #{<<"routes">> := [Route | _]} = Result,
+
+                    % 提取距离和时间
+                    #{<<"distance">> := Distance, <<"duration">> := Duration} = Route,
+
+                    % 构建结果
+                    {ok, #{
+                        distance => Distance,  % 单位：米
+                        duration => Duration,  % 单位：秒
+                        start_location => Start,
+                        end_location => End
+                    }};
+                _ ->
+                    Response1
             end;
-        {error, Reason} ->
-            logger:error("获取腾讯地图配置失败: ~p", [Reason]),
-            {error, Reason}
+        _ ->
+            Response0
     end.
 
 %%====================================================================
@@ -53,14 +59,7 @@ get_distance_duration(Start, End) ->
 %% @doc 获取地图配置
 %% 从应用配置获取腾讯地图API配置
 get_map_config() ->
-    % 从应用环境变量获取配置
-    case application:get_env(external_trans_service, tencent_map) of
-        {ok, Config} ->
-            {ok, Config};
-        undefined ->
-            logger:error("腾讯地图配置未设置"),
-            {error, config_not_found}
-    end.
+    application:get_env(external_trans_service, tencent_map).
 
 %% @doc 构建请求URL
 %% 构建腾讯地图API请求URL
@@ -93,34 +92,6 @@ build_request_url(Start, End, ApiUrl, ApiKey) ->
 
     % 构建完整URL
     <<ApiUrl/binary, "?", QueryString/binary>>.
-
-%% @doc 解析响应
-%% 解析腾讯地图API响应
-parse_response(ResponseBody, Start, End) ->
-    ResultMap = jsx:decode(ResponseBody, [return_maps]),
-    case ResultMap of
-        #{<<"status">> := 0, <<"result">> := Result} ->
-            % 提取路线信息
-            #{<<"routes">> := [Route | _]} = Result,
-
-            % 提取距离和时间
-            #{<<"distance">> := Distance, <<"duration">> := Duration} = Route,
-
-            % 构建结果
-            {ok, #{
-                distance => Distance,  % 单位：米
-                duration => Duration,  % 单位：秒
-                start_location => Start,
-                end_location => End
-            }};
-        #{<<"status">> := Status, <<"message">> := Message} ->
-            logger:error("腾讯地图API返回错误 [Start: ~p, End: ~p]: ~p - ~p", 
-                [Start, End, Status, Message]),
-            {error, {api_error, Status, Message}};
-        _ ->
-            logger:error("腾讯地图API响应格式异常 [Start: ~p, End: ~p]", [Start, End]),
-            {error, invalid_response}
-    end.
 
 %% @doc 缓存结果
 %% 将查询结果缓存到Redis
