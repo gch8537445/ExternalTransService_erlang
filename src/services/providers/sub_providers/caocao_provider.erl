@@ -129,22 +129,12 @@ refresh_config() ->
     ProviderKey = <<"provider:caocao">>,
     case redis_client:get(ProviderKey) of
         {ok, ConfigJson} ->
-            try
-                % 解析JSON配置
-                Config = jsx:decode(ConfigJson, [return_maps]),
-                % 更新状态
-                logger:notice("已加载曹操配置: ~p", [Config]),
-                ets:insert(provider_config, {caocao, Config}),
-                {ok, Config}
-            catch
-                Type:Reason:Stack ->
-                    % 记录错误日志
-                    logger:error(
-                        "解析曹操配置失败: ~p:~p~n~p",
-                        [Type, Reason, Stack]
-                    ),
-                    {error, {parse_error, Reason}}
-            end;
+            % 解析JSON配置
+            Config = jsx:decode(ConfigJson, [return_maps]),
+            % 更新状态
+            logger:notice("已加载曹操配置: ~p", [Config]),
+            ets:insert(provider_config, {caocao, Config}),
+            {ok, Config};
         {error, Reason} ->
             % 记录错误日志
             logger:error("获取曹操配置失败: ~p", [Reason]),
@@ -243,10 +233,7 @@ make_request(Method, Url, Params) ->
                   get ->
                       url_with_params(Url, ParamsWithSign);
                   post ->
-                      % 对于POST请求，我们需要区别对待
-                      FormattedUrl = url_with_params(Url, ParamsWithSign),
-                      % 对于POST我们需要返回URL，不需要请求体，因为参数已经在URL中
-                      FormattedUrl
+                      url_with_params(Url, ParamsWithSign)
               end,
 
     logger:notice("make_request ------ URL: ~p", [Request]),
@@ -254,20 +241,14 @@ make_request(Method, Url, Params) ->
     % 发送请求
     case apply_request(Method, Request) of
         {ok, 200, ResponseBody} ->
-            try jsx:decode(ResponseBody, [return_maps]) of
+            case jsx:decode(ResponseBody, [return_maps]) of
                 #{<<"code">> := 200, <<"data">> := Data} ->
                     {ok, Data};
-                #{<<"code">> := Code, <<"message">> := Message} ->
-                    {error, {api_error, Code, Message}};
-                _ ->
-                    {error, invalid_response}
-            catch
-                _:_ -> {error, invalid_response}
+                ResponseMap ->
+                    {error, ResponseMap}
             end;
-        {ok, StatusCode, _} ->
-            {error, {http_error, StatusCode}};
-        {error, Reason} ->
-            {error, {request_failed, Reason}}
+        {error, RequestError} ->
+            {error, RequestError}
     end.
 
 %% 添加可选参数
@@ -288,6 +269,8 @@ add_optional_params(BaseParams, OptionalFields, OrderParams) ->
 %% HTTP请求执行
 apply_request(get, Url) ->
     http_client:get(Url);
+apply_request(post, Url) ->
+    http_client:post(Url);
 apply_request(post, {Url, Body}) ->
     http_client:post(Url, Body);
 apply_request(post, Url) when is_binary(Url) ->

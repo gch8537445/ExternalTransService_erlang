@@ -79,57 +79,48 @@ calculate_all_car_prices(MapData, PricingRules) ->
     DurationMin = Duration / 60,   % 转换为分钟
 
     % 为每个车型计算价格
-    try
-        CarPrices = lists:map(
-            fun(Rule) ->
-                % 提取ipath_trans_code信息
-                TransCode = maps:get(<<"ipath_trans_code">>, Rule),
-                % 为了向后兼容，仍然提取car_type，但不再作为主要标识符
-                CarType = maps:get(<<"car_type">>, Rule, 0),
+    CarPrices = lists:map(
+        fun(Rule) ->
+            % 提取ipath_trans_code信息
+            TransCode = maps:get(<<"ipath_trans_code">>, Rule),
+            % 为了向后兼容，仍然提取car_type，但不再作为主要标识符
+            CarType = maps:get(<<"car_type">>, Rule, 0),
 
-                % 计算价格
-                {ok, Price, Details} = calculate_car_price_by_rule(
-                    Rule,
-                    #{
-                        <<"distance">> => DistanceKm,
-                        <<"duration">> => DurationMin
-                    }
-                ),
-
-                % 构建结果，使用ipath_trans_code作为主要标识符
+            % 计算价格
+            {ok, Price, Details} = calculate_car_price_by_rule(
+                Rule,
                 #{
-                    ipath_trans_code => TransCode,
-                    car_type => CarType,  % 为了向后兼容保留
-                    price => Price,
-                    currency => <<"CNY">>,
-                    details => Details,
-                    distance => Distance,
-                    duration => Duration
+                    <<"distance">> => DistanceKm,
+                    <<"duration">> => DurationMin
                 }
-            end,
-            PricingRules
-        ),
-
-        % 构建最终结果
-        Result = #{
-            prices => CarPrices,
-            map_info => #{
-                distance => Distance,
-                duration => Duration,
-                start_location => maps:get(start_location, MapData),
-                end_location => maps:get(end_location, MapData)
-            }
-        },
-
-        {ok, Result}
-    catch
-        Type:Reason:Stack ->
-            logger:error(
-                "Price calculation failed: ~p:~p~n~p",
-                [Type, Reason, Stack]
             ),
-            {error, calculation_failed}
-    end.
+
+            % 构建结果，使用ipath_trans_code作为主要标识符
+            #{
+                ipath_trans_code => TransCode,
+                car_type => CarType,  % 为了向后兼容保留
+                price => Price,
+                currency => <<"CNY">>,
+                details => Details,
+                distance => Distance,
+                duration => Duration
+            }
+        end,
+        PricingRules
+    ),
+
+    % 构建最终结果
+    Result = #{
+        prices => CarPrices,
+        map_info => #{
+            distance => Distance,
+            duration => Duration,
+            start_location => maps:get(start_location, MapData),
+            end_location => maps:get(end_location, MapData)
+        }
+    },
+
+    {ok, Result}.
 
 %% @doc 计算价格
 %% 根据计费规则和变量计算价格
@@ -143,26 +134,14 @@ calculate_car_price_by_rule(Rule, Variables) ->
     % 构建变量映射
     VariableMap = build_variable_map(FeeItems, Variables),
 
-    % 替换公式中的变量
-    try
-        % 解析公式
-        {Formula, Details} = parse_formula(FormulaTemplate, VariableMap),
+    % 解析公式
+    {Formula, Details} = parse_formula(FormulaTemplate, VariableMap),
 
-        % 计算公式
-        Result = calculate_formula(Formula),
+    % 计算公式
+    Result = calculate_formula(Formula),
 
-        % 返回结果
-        {ok, Result, Details}
-    catch
-        throw:{error, Reason} ->
-            {error, Reason};
-        Type:Reason:Stack ->
-            logger:error(
-                "Formula calculation failed: ~p:~p~n~p",
-                [Type, Reason, Stack]
-            ),
-            {error, formula_error}
-    end.
+    % 返回结果
+    {ok, Result, Details}.
 
 %% @doc 构建变量映射
 %% 将费用项和其他变量合并成一个映射
@@ -178,17 +157,8 @@ build_variable_map(FeeItems, Variables) ->
             case is_night_fee_applicable(FeeItem) of
                 true ->
                     % 将费用值转换为浮点数
-                    try binary_to_float(FeeValue) of
-                        Value -> maps:put(FeeName, Value, Acc)
-                    catch
-                        error:badarg ->
-                            % 尝试将整数转换为浮点数
-                            try list_to_float(binary_to_list(FeeValue) ++ ".0") of
-                                Value -> maps:put(FeeName, Value, Acc)
-                            catch
-                                error:badarg -> maps:put(FeeName, 0.0, Acc)
-                            end
-                    end;
+                    Value = convert_to_float(FeeValue),
+                    maps:put(FeeName, Value, Acc);
                 false ->
                     % 夜间费用不适用，设置为0
                     maps:put(FeeName, 0.0, Acc)
@@ -211,15 +181,7 @@ build_variable_map(FeeItems, Variables) ->
             ValueFloat = if
                 is_float(Value) -> Value;
                 is_integer(Value) -> float(Value);
-                is_binary(Value) ->
-                    try binary_to_float(Value)
-                    catch
-                        error:badarg ->
-                            try list_to_float(binary_to_list(Value) ++ ".0")
-                            catch
-                                error:badarg -> 0.0
-                            end
-                    end;
+                is_binary(Value) -> convert_to_float(Value);
                 true -> 0.0
             end,
             
@@ -228,6 +190,18 @@ build_variable_map(FeeItems, Variables) ->
         BaseMap,
         Variables
     ).
+
+%% @doc 将二进制字符串转换为浮点数
+convert_to_float(Bin) ->
+    case binary_to_float(Bin) of
+        {error, _} ->
+            % 尝试将整数转换为浮点数
+            case (catch list_to_float(binary_to_list(Bin) ++ ".0")) of
+                {'EXIT', _} -> 0.0;
+                Value -> Value
+            end;
+        Value -> Value
+    end.
 
 %% @doc 检查夜间费用是否适用
 %% 根据当前时间和费用项的时间范围判断夜间费用是否适用
@@ -320,7 +294,9 @@ parse_formula(FormulaTemplate, VariableMap) ->
                     
                     {NewFormAcc, NewDetailsAcc};
                 error ->
-                    throw({error, {unknown_variable, VarName}})
+                    % 未知变量，抛出错误
+                    logger:error("未知变量: ~p", [VarName]),
+                    {FormAcc, DetailsAcc}
             end
         end,
         {FormulaTemplate, #{}},
@@ -346,5 +322,5 @@ calculate_formula(Formula) ->
     if
         is_float(Result) -> Result;
         is_integer(Result) -> float(Result);
-        true -> throw({error, invalid_result})
+        true -> 0.0
     end.

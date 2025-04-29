@@ -19,53 +19,34 @@
 init(Req0, State) ->
     % 读取请求体
     {ok, Body, Req1} = cowboy_req:read_body(Req0),
-
-    try
-        % 解析JSON请求体
-        Params = jsx:decode(Body, [return_maps]),
-
-        % 直接调用order_service
-        Response = order_service:create_order(Params),
-
-        % 生成响应
-        case Response of
-            {ok, Result} ->
-                Req2 = cowboy_req:reply(200, #{
-                    <<"content-type">> => <<"application/json">>
-                }, jsx:encode(#{
+    % 解析JSON请求体
+    Params = jsx:decode(Body, [return_maps]),
+    % 调用order_service
+    Response = order_service:create_order(Params),
+    % 生成响应
+    case Response of
+        {ok, Result} ->
+            SuccessResponse = cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>},
+                jsx:encode(#{
                     success => true,
                     data => Result
                 }), Req1),
-                {ok, Req2, State};
-            {error, Reason} ->
-                Req2 = cowboy_req:reply(400, #{
-                    <<"content-type">> => <<"application/json">>
-                }, jsx:encode(#{
+            {ok, SuccessResponse, State};
+        {error, Reason} ->
+            FailResponse = cowboy_req:reply(400, #{<<"content-type">> => <<"application/json">>},
+                jsx:encode(#{
                     success => false,
                     error => Reason
                 }), Req1),
-                {ok, Req2, State}
-        end
-    catch
-        _:badarg ->
-            % 处理JSON解析错误
-            JSXError = cowboy_req:reply(400, #{
-                <<"content-type">> => <<"application/json">>
-            }, jsx:encode(#{
-                success => false,
-                error => invalid_json_format
-            }), Req1),
-            {ok, JSXError, State};
-        _:OtherReason ->
+            {ok, FailResponse, State};
+        _ ->
             % 处理其他错误
-            error_logger:error_msg("订单处理出错: ~p~n", [OtherReason]),
-            OtherError = cowboy_req:reply(500, #{
-                <<"content-type">> => <<"application/json">>
-            }, jsx:encode(#{
-                success => false,
-                error => internal_server_error
-            }), Req1),
-            {ok, OtherError, State}
+            ErrorResponse = cowboy_req:reply(500, #{<<"content-type">> => <<"application/json">>},
+                jsx:encode(#{
+                    success => false,
+                    error => internal_server_error
+                }), Req1),
+            {ok, ErrorResponse, State}
     end.
 
 %% @doc 终止处理器

@@ -97,7 +97,8 @@ build_request_url(Start, End, ApiUrl, ApiKey) ->
 %% @doc 解析响应
 %% 解析腾讯地图API响应
 parse_response(ResponseBody, Start, End) ->
-    try jsx:decode(ResponseBody, [return_maps]) of
+    ResultMap = jsx:decode(ResponseBody, [return_maps]),
+    case ResultMap of
         #{<<"status">> := 0, <<"result">> := Result} ->
             % 提取路线信息
             #{<<"routes">> := [Route | _]} = Result,
@@ -115,11 +116,9 @@ parse_response(ResponseBody, Start, End) ->
         #{<<"status">> := Status, <<"message">> := Message} ->
             logger:error("腾讯地图API返回错误 [Start: ~p, End: ~p]: ~p - ~p", 
                 [Start, End, Status, Message]),
-            {error, {api_error, Status, Message}}
-    catch
-        Type:Error:Stack ->
-            logger:error("腾讯地图API响应解析失败 [Start: ~p, End: ~p]: ~p:~p~n~p", 
-                [Start, End, Type, Error, Stack]),
+            {error, {api_error, Status, Message}};
+        _ ->
+            logger:error("腾讯地图API响应格式异常 [Start: ~p, End: ~p]", [Start, End]),
             {error, invalid_response}
     end.
 

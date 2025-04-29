@@ -70,12 +70,10 @@ request(Method, Url, Headers, Body, Options) ->
                 {ok, RespBody} ->
                     {ok, StatusCode, RespBody};
                 {error, Reason} ->
-                    {error, {body_error, Reason}}
+                    {error, Reason}
             end;
-        {ok, StatusCode, _RespHeaders} ->
-            {ok, StatusCode, <<>>};
         {error, Reason} ->
-            {error, {request_error, Reason}}
+            {error, Reason}
     end.
 
 %%====================================================================

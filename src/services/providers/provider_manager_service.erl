@@ -111,27 +111,18 @@ load_provider(ProviderModule) ->
                                     case code:load_binary(ProviderModule, SrcFile, Binary) of
                                         {module, ProviderModule} ->
                                             % 模块已经加载，初始化提供者
-                                            try
-                                                % 调用提供者的init函数初始化
-                                                case ProviderModule:init([]) of
-                                                    {ok, _} ->
-                                                        % 提供者初始化成功，将其添加到ETS表中
-                                                        NewProviders = [ProviderModule | Providers],
-                                                        ets:insert(?ETS_TABLE, {?PROVIDER_KEY, NewProviders}),
-                                                        {ok, #{
-                                                            message => <<"运力提供商加载成功"/utf8>>,
-                                                            provider_module => ProviderModule
-                                                        }};
-                                                    {error, InitError} ->
-                                                        {error, InitError}
-                                                end
-                                            catch
-                                                Type:Error:Stack ->
-                                                    logger:error(
-                                                        "Provider ~p init failed: ~p:~p~n~p",
-                                                        [ProviderModule, Type, Error, Stack]
-                                                    ),
-                                                    {error, init_failed}
+                                            % 调用提供者的init函数初始化
+                                            case ProviderModule:init([]) of
+                                                {ok, _} ->
+                                                    % 提供者初始化成功，将其添加到ETS表中
+                                                    NewProviders = [ProviderModule | Providers],
+                                                    ets:insert(?ETS_TABLE, {?PROVIDER_KEY, NewProviders}),
+                                                    {ok, #{
+                                                        message => <<"运力提供商加载成功"/utf8>>,
+                                                        provider_module => ProviderModule
+                                                    }};
+                                                {error, InitError} ->
+                                                    {error, InitError}
                                             end;
                                         {error, LoadError} ->
                                             % 模块加载失败
@@ -200,24 +191,15 @@ load_all_providers() ->
                     case code:ensure_loaded(ProviderModule) of
                         {module, ProviderModule} ->
                             % 初始化提供者
-                            try
-                                case ProviderModule:init([]) of
-                                    {ok, _} ->
-                                        % 监控提供商进程不再需要
-                                        logger:notice("自动加载并初始化运力提供商: ~p", [ProviderModule]),
-                                        % 更新提供商列表
-                                        {[{ok, ProviderModule} | ResultsAcc], [ProviderModule | ProvidersAcc]};
-                                    {error, Reason} ->
-                                        logger:error("初始化运力提供商失败 ~p: ~p", [ProviderModule, Reason]),
-                                        {[{error, {init_failed, ProviderModule, Reason}} | ResultsAcc], ProvidersAcc}
-                                end
-                            catch
-                                Type:Error:Stack ->
-                                    logger:error(
-                                        "Provider ~p init failed: ~p:~p~n~p", 
-                                        [ProviderModule, Type, Error, Stack]
-                                    ),
-                                    {[{error, {init_failed, ProviderModule, Error}} | ResultsAcc], ProvidersAcc}
+                            case ProviderModule:init([]) of
+                                {ok, _} ->
+                                    % 监控提供商进程不再需要
+                                    logger:notice("自动加载并初始化运力提供商: ~p", [ProviderModule]),
+                                    % 更新提供商列表
+                                    {[{ok, ProviderModule} | ResultsAcc], [ProviderModule | ProvidersAcc]};
+                                {error, Reason} ->
+                                    logger:error("初始化运力提供商失败 ~p: ~p", [ProviderModule, Reason]),
+                                    {[{error, {init_failed, ProviderModule, Reason}} | ResultsAcc], ProvidersAcc}
                             end;
                         {error, Reason} ->
                             logger:error("加载运力提供商模块失败 ~p: ~p", [ProviderModule, Reason]),

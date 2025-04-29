@@ -22,14 +22,8 @@ get_user_config(UserId) ->
     % 从Redis获取用户配置
     case redis_client:get(Key) of
         {ok, ConfigJson} ->
-            try jsx:decode(ConfigJson, [return_maps]) of
-                Config -> {ok, Config}
-            catch
-                Type:Error:Stack -> 
-                    logger:error("用户配置解析失败 [UserId: ~p]: ~p:~p~n~p", 
-                        [UserId, Type, Error, Stack]),
-                    {error, invalid_user_config}
-            end;
+            Result = jsx:decode(ConfigJson, [return_maps]),
+            {ok, Result};
         {error, not_found} ->
             logger:error("用户配置不存在 [UserId: ~p]", [UserId]),
             {error, {user_not_found, UserId}};

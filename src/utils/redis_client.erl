@@ -143,18 +143,11 @@ with_retry(Fun) ->
 %% 如果函数执行失败，会重试几次，可以指定重试次数和间隔时间
 with_retry(Fun, 0, _Sleep) ->
     % 重试次数用完，返回最后一次执行的结果
-    try Fun() of
-        Result -> Result
-    catch
-        Type:Reason:Stack ->
-            logger:error(
-                "Redis operation failed: ~p:~p~n~p", 
-                [Type, Reason, Stack]
-            ),
-            {error, {Type, Reason}}
-    end;
+    Result = Fun(),
+    Result;
 with_retry(Fun, Retries, Sleep) ->
-    try Fun() of
+    Result = Fun(),
+    case Result of
         {error, no_connection} ->
             % 连接错误，等待一段时间后重试
             timer:sleep(Sleep),
@@ -163,16 +156,7 @@ with_retry(Fun, Retries, Sleep) ->
             % 连接错误，等待一段时间后重试
             timer:sleep(Sleep),
             with_retry(Fun, Retries - 1, Sleep);
-        Result ->
+        _ ->
             % 成功或其他错误，直接返回
             Result
-    catch
-        Type:Reason:Stack ->
-            logger:error(
-                "Redis operation failed: ~p:~p~n~p", 
-                [Type, Reason, Stack]
-            ),
-            % 出现异常，等待一段时间后重试
-            timer:sleep(Sleep),
-            with_retry(Fun, Retries - 1, Sleep)
     end.

@@ -41,21 +41,18 @@ create_order(Params) ->
 
 %% @doc 调用单个提供商的创建订单接口
 call_provider_create_order(ProviderModule, Params) ->
-    try
-        % 直接调用提供者模块的create_order函数
-        case ProviderModule:create_order(Params) of
-            {ok, Result} ->
-                {ProviderModule, {ok, Result}};
-            {error, Reason} ->
-                {ProviderModule, {error, Reason}}
-        end
-    catch
-        exit:{timeout, _} ->
+    % 直接调用提供者模块的create_order函数
+    case ProviderModule:create_order(Params) of
+        {ok, Result} ->
+            {ProviderModule, {ok, Result}};
+        {error, Reason} ->
+            {ProviderModule, {error, Reason}};
+        {'EXIT', {timeout, _}} ->
             {ProviderModule, {error, timeout}};
-        Type:ErrorReason:Stack ->
+        {'EXIT', Reason} ->
             logger:error(
-                "Provider ~p create_order failed: ~p:~p~n~p",
-                [ProviderModule, Type, ErrorReason, Stack]
+                "Provider ~p create_order failed: ~p",
+                [ProviderModule, Reason]
             ),
             {ProviderModule, {error, internal_error}}
     end.

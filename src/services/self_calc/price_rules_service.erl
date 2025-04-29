@@ -43,27 +43,34 @@ get_price_rules(UserId) ->
 %% @doc 获取ipath_trans_code的计费规则
 %% 从Redis获取指定ipath_trans_code的计费规则
 get_rules_for_trans_codes(TransCodes) ->
-    % 并行获取每个ipath_trans_code的计费规则
-    try
-        Rules = lists:map(
-            fun(TransCode) ->
-                % 获取计费规则
-                case get_rule_by_trans_code(integer_to_binary(TransCode)) of
-                    {ok, Rule} -> 
-                        Rule;
-                    {error, Reason} -> 
-                        % 如果获取失败，直接抛出错误
-                        logger:error("获取运力代码计费规则失败 [TransCode: ~p]: ~p", [TransCode, Reason]),
-                        throw({error, {rule_fetch_failed, TransCode, Reason}})
-                end
-            end,
-            TransCodes
-        ),
-        {ok, Rules}
-    catch
-        throw:{error, Reason} ->
-            logger:error("获取多个计费规则时失败: ~p", [Reason]),
-            {error, Reason}
+    % 获取所有计费规则
+    Rules = lists:map(
+        fun(TransCode) ->
+            % 获取计费规则
+            case get_rule_by_trans_code(integer_to_binary(TransCode)) of
+                {ok, Rule} -> 
+                    Rule;
+                {error, Reason} -> 
+                    % 如果获取失败，记录错误并返回空规则
+                    logger:error("获取运力代码计费规则失败 [TransCode: ~p]: ~p", [TransCode, Reason]),
+                    #{<<"ipath_trans_code">> => TransCode, <<"error">> => atom_to_binary(Reason, utf8)}
+            end
+        end,
+        TransCodes
+    ),
+    
+    % 过滤出有效的规则
+    ValidRules = lists:filter(
+        fun(Rule) -> not maps:is_key(<<"error">>, Rule) end,
+        Rules
+    ),
+    
+    % 如果没有有效规则，返回错误
+    case ValidRules of
+        [] ->
+            {error, no_valid_rules};
+        _ ->
+            {ok, ValidRules}
     end.
 
 %% @doc 根据ipath_trans_code获取计费规则
@@ -75,14 +82,8 @@ get_rule_by_trans_code(TransCode) ->
     % 从Redis获取计费规则
     case redis_client:get(Key) of
         {ok, RuleJson} ->
-            try jsx:decode(RuleJson, [return_maps]) of
-                Rule -> {ok, Rule}
-            catch
-                Type:Error:Stack ->
-                    logger:error("计费规则解析失败 [TransCode: ~p]: ~p:~p~n~p",
-                        [TransCode, Type, Error, Stack]),
-                    {error, invalid_rule_format}
-            end;
+            Rule = jsx:decode(RuleJson, [return_maps]),
+            {ok, Rule};
         {error, not_found} ->
             % 如果找不到规则，直接返回错误
             logger:error("找不到计费规则 [TransCode: ~p]", [TransCode]),
