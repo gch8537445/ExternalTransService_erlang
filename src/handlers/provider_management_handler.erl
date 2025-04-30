@@ -36,12 +36,16 @@ init(Req0, State) ->
                        {error, invalid_operation}
                end,
 
-    Response = cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>},
-        jsx:encode(#{
-            success => true,
-            data => Result
-        }), Req1),
-    {ok, Response, State}.
+    logger:error("Result ~p", [Result]),
+
+    try
+        Response = cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, jsx:encode(Result), Req1),
+        {ok, Response, State}
+    catch
+        _ ->
+            ErrorResponse = cowboy_req:reply(500, #{<<"content-type">> => <<"application/json">>}, Result, Req1),
+            {ok, ErrorResponse, State}
+    end.
 
 %% @doc 终止处理器
 terminate(_Reason, _Req, _State) ->
