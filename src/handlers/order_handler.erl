@@ -1,7 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 预估价HTTP处理器
-%%% 处理预估价HTTP请求，解析请求参数，调用预估价服务，返回结果
+%%% 订单HTTP处理器
 %%% @end
 %%%-------------------------------------------------------------------
 -module(order_handler).
@@ -15,14 +14,28 @@
 %%====================================================================
 
 %% @doc 初始化处理器
-%% 处理HTTP请求，解析JSON请求体，调用预估价服务，返回JSON响应
+%% 处理HTTP请求，解析JSON请求体，根据操作类型调用订单服务，返回JSON响应
 init(Req0, State) ->
     % 读取请求体
     {ok, Body, Req1} = cowboy_req:read_body(Req0),
     % 解析JSON请求体
     Params = jsx:decode(Body, [return_maps]),
-    % 调用order_service
-    Response = order_service:create_order(Params),
+    
+    % 获取请求路径和方法以确定操作类型
+    Path = cowboy_req:path(Req1),
+    %Method = cowboy_req:method(Req1),
+    
+    % 根据路径和方法决定调用哪个服务方法
+    Response = 
+        case {Path} of
+            {<<"/api/order/estimate_price">>} -> % 预估价
+                order_service:estimate_price(Params);
+            {<<"/api/order/create_order">>} -> % 创建订单
+                order_service:create_order(Params);
+            _ ->
+                {error, path_error}
+        end,
+    
     % 生成响应
     case Response of
         {ok, Result} ->

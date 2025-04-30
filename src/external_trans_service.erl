@@ -22,7 +22,7 @@ start(_StartType, _StartArgs) ->
             % 运力提供商管理API路由
             {"/api/provider", provider_management_handler, []},
             % 预估价API路由
-            {"/api/estimate_price", estimate_price_handler, []},
+            {"/api/order/estimate_price", order_handler, []},
             % 订单API路由
             {"/api/order/create_order", order_handler, []}
         ]}

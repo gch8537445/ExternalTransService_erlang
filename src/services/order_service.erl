@@ -1,17 +1,36 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% 订单服务
-%%% 处理创建订单、查询订单、取消订单等业务逻辑
+%%% 处理预估价、创建订单、查询订单、取消订单等业务逻辑
 %%% @end
 %%%-------------------------------------------------------------------
 -module(order_service).
 
 %% API
--export([create_order/1]).
+-export([create_order/1, estimate_price/1]).
 
 %%====================================================================
 %% API 函数
 %%====================================================================
+
+%% @doc 预估价
+%% 根据用户的设置，决定自己算还是调用运力提供商的预估价接口
+estimate_price(Params) ->
+    % 从Redis获取用户配置
+    case user_service:get_user_config(maps:get(<<"user_id">>, Params, undefined)) of
+        {ok, UserConfig} ->
+            % 检查是否使用自己的计算方式
+            case maps:get(<<"estimate_calc_type">>, UserConfig, 0) of
+                0 ->
+                    % 0, 使用自己的计算方式
+                    self_calc_service:self_calc_prices(Params);
+                1 ->
+                    % 1, 调用运力提供商的预估价接口
+                    provider_api_service:provider_calc_prices(Params)
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %% @doc 创建订单
 %% 并发调用各个子运力对应的create_order方法
@@ -44,7 +63,7 @@ call_provider_create_order(ProviderModule, Params) ->
     % 直接调用提供者模块的create_order函数
     case ProviderModule:create_order(Params) of
         {ok, Result} ->
-            {ProviderModule, {ok, Result}};
+            {ok, Result};
         {error, Reason} ->
             {ProviderModule, {error, Reason}};
         {'EXIT', {timeout, _}} ->
