@@ -28,9 +28,7 @@ init([]) ->
 %% @doc 估算价格
 estimate_price(Params) ->
     % 获取配置
-    {ok, Config} = get_config(),
-
-    % 获取配置
+    Config = get_config(),
     Domain = maps:get(<<"CAOCAO_DOMAIN">>, Config),
     ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, Config),
     SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, Config),
@@ -69,8 +67,8 @@ estimate_price(Params) ->
 
 %% 发起叫车请求
 create_order(Params) ->
-    {ok, Config} = get_config(),
     % 获取配置
+    Config = get_config(),
     Domain = maps:get(<<"CAOCAO_DOMAIN">>, Config),
     ClientId = maps:get(<<"CAOCAO_CLIENT_ID">>, Config),
     SignKey = maps:get(<<"CAOCAO_SIGN_KEY">>, Config),
@@ -121,7 +119,7 @@ create_order(Params) ->
         {ok, 200, Data} ->
             {ok, Data};
         _ ->
-        Response
+            Response
     end.
 
 %%====================================================================
@@ -131,26 +129,16 @@ create_order(Params) ->
 %% @doc 刷新配置
 refresh_config() ->
     % 从Redis直接加载配置
-    ProviderKey = <<"provider:caocao">>,
-    case redis_client:get(ProviderKey) of
-        {ok, ConfigJson} ->
-            % 解析JSON配置
-            Config = jsx:decode(ConfigJson, [return_maps]),
-            % 更新状态
-            logger:notice("已加载曹操配置: ~p", [Config]),
-            ets:insert(provider_config, {caocao, Config}),
-            {ok, Config};
-        {error, Reason} ->
-            % 记录错误日志
-            logger:error("获取曹操配置失败: ~p", [Reason]),
-            {error, Reason}
-    end.
+    Config = jsx:decode(redis_client:get(<<"provider:caocao">>), [return_maps]),
+    ets:insert(provider_config, {caocao, Config}),
+    logger:notice("已加载曹操配置: ~p", [Config]),
+    Config.
 
 %% @doc 获取配置
 get_config() ->
     case ets:lookup(provider_config, caocao) of
         [{caocao, Config}] ->
-            {ok, Config};
+            Config;
         [] ->
             refresh_config()
     end.
@@ -175,7 +163,6 @@ calculate_sign(Params, SignKey) ->
 
     % 计算SHA1哈希
     HashBin = crypto:hash(sha, SignStr),
-    
     % 转换为小写十六进制字符串
     list_to_binary([string:to_lower(io_lib:format("~2.16.0b", [X])) || <<X>> <= HashBin]).
 

@@ -40,7 +40,14 @@ init(Args) ->
 %% @doc 获取键值
 %% 从Redis获取指定键的值
 get(Key) ->
-    poolboy:transaction(?POOL, fun(Worker) -> eredis:q(Worker, ["GET", Key]) end).
+    case poolboy:transaction(?POOL, fun(Worker) -> eredis:q(Worker, ["GET", Key]) end) of
+        {ok, undefined} ->
+            logger:error("Redis GET操作失败 [Key: ~p]: ~p", [Key, undefined]);
+        {ok, Value} ->
+            Value;
+        _ ->
+            logger:error("Redis GET操作失败 [Key: ~p]: ~p", [Key, error])
+    end.
 
 %% @doc 设置键值
 %% 在Redis中设置指定键的值

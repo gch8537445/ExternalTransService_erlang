@@ -9,9 +9,6 @@
 %% API
 -export([get_distance_duration/2]).
 
-%% 内部导出函数，供测试使用
--export([cache_result/3]).
-
 %%====================================================================
 %% API 函数
 %%====================================================================
@@ -92,20 +89,3 @@ build_request_url(Start, End, ApiUrl, ApiKey) ->
 
     % 构建完整URL
     <<ApiUrl/binary, "?", QueryString/binary>>.
-
-%% @doc 缓存结果
-%% 将查询结果缓存到Redis
-cache_result(Start, End, Result) ->
-    % 构建缓存键
-    Key = <<"map:route:", Start/binary, ":", End/binary>>,
-    % 序列化结果
-    ResultJson = jsx:encode(Result),
-
-    % 存储到Redis，设置过期时间为1小时
-    case redis_client:setex(Key, 3600, ResultJson) of
-        {ok, _} -> ok;
-        {error, Reason} -> 
-            logger:error("缓存地图路线结果失败 [Start: ~p, End: ~p]: ~p", 
-                [Start, End, Reason]),
-            {error, Reason}
-    end.

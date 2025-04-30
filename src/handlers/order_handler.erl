@@ -26,7 +26,7 @@ init(Req0, State) ->
     %Method = cowboy_req:method(Req1),
     
     % 根据路径和方法决定调用哪个服务方法
-    Response = 
+    Result =
         case {Path} of
             {<<"/api/order/estimate_price">>} -> % 预估价
                 order_service:estimate_price(Params);
@@ -35,32 +35,17 @@ init(Req0, State) ->
             _ ->
                 {error, path_error}
         end,
-    
-    % 生成响应
-    case Response of
-        {ok, Result} ->
-            SuccessResponse = cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>},
-                jsx:encode(#{
-                    success => true,
-                    data => Result
-                }), Req1),
-            {ok, SuccessResponse, State};
-        {error, Reason} ->
-            FailResponse = cowboy_req:reply(400, #{<<"content-type">> => <<"application/json">>},
-                jsx:encode(#{
-                    success => false,
-                    error => Reason
-                }), Req1),
-            {ok, FailResponse, State};
-        _ ->
-            % 处理其他错误
-            ErrorResponse = cowboy_req:reply(500, #{<<"content-type">> => <<"application/json">>},
-                jsx:encode(#{
-                    success => false,
-                    error => Response
-                }), Req1),
-            {ok, ErrorResponse, State}
-    end.
+
+    logger:error("Result ~p", [Result]),
+
+    try
+        Response = cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, jsx:encode(Result), Req1),
+        {ok, Response, State}
+     catch
+         _ ->
+             ErrorResponse = cowboy_req:reply(500, #{<<"content-type">> => <<"application/json">>}, Result, Req1),
+             {ok, ErrorResponse, State}
+     end.
 
 %% @doc 终止处理器
 terminate(_Reason, _Req, _State) ->

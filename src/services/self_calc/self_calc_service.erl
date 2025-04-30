@@ -35,7 +35,7 @@ self_calc_prices(Params) ->
     RulesRef = make_ref(),
     spawn_link(
         fun() ->
-            Result = price_rules_service:get_price_rules(maps:get(<<"user_id">>, Params, undefined)),
+            Result = price_rules_service:get_price_rules(maps:get(<<"user_id">>, Params)),
             Parent ! {RulesRef, Result}
         end
     ),
@@ -87,7 +87,7 @@ calculate_all_car_prices(MapData, PricingRules) ->
             CarType = maps:get(<<"car_type">>, Rule, 0),
 
             % 计算价格
-            {ok, Price, Details} = calculate_car_price_by_rule(
+            {Price, Details} = calculate_car_price_by_rule(
                 Rule,
                 #{
                     <<"distance">> => DistanceKm,
@@ -110,7 +110,7 @@ calculate_all_car_prices(MapData, PricingRules) ->
     ),
 
     % 构建最终结果
-    Result = #{
+    #{
         prices => CarPrices,
         map_info => #{
             distance => Distance,
@@ -118,30 +118,23 @@ calculate_all_car_prices(MapData, PricingRules) ->
             start_location => maps:get(start_location, MapData),
             end_location => maps:get(end_location, MapData)
         }
-    },
-
-    {ok, Result}.
+    }.
 
 %% @doc 计算价格
 %% 根据计费规则和变量计算价格
 calculate_car_price_by_rule(Rule, Variables) ->
     % 提取公式模板
     FormulaTemplate = maps:get(<<"formula_template">>, Rule, <<"">>),
-
     % 提取费用项
     FeeItems = maps:get(<<"fee_items">>, Rule, []),
-
     % 构建变量映射
     VariableMap = build_variable_map(FeeItems, Variables),
-
     % 解析公式
     {Formula, Details} = parse_formula(FormulaTemplate, VariableMap),
-
     % 计算公式
     Result = calculate_formula(Formula),
-
     % 返回结果
-    {ok, Result, Details}.
+    {Result, Details}.
 
 %% @doc 构建变量映射
 %% 将费用项和其他变量合并成一个映射

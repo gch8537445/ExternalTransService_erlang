@@ -23,7 +23,7 @@ init(Req0, State) ->
     % 获取操作类型
     Operation = maps:get(<<"operation">>, RequestData, undefined),
     % 处理不同的操作
-    Response = case Operation of
+    Result = case Operation of
                    <<"load_provider">> ->
                        provider_manager_service:load_provider(binary_to_atom(maps:get(<<"provider_module">>, RequestData, undefined), utf8));
                    <<"unload_provider">> ->
@@ -36,31 +36,12 @@ init(Req0, State) ->
                        {error, invalid_operation}
                end,
 
-    % 生成响应
-    case Response of
-        {ok, Result} ->
-            SuccessResponse = cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>},
-                jsx:encode(#{
-                    success => true,
-                    data => Result
-                }), Req1),
-            {ok, SuccessResponse, State};
-        {error, Reason} ->
-            FailResponse = cowboy_req:reply(400, #{<<"content-type">> => <<"application/json">>},
-                jsx:encode(#{
-                    success => false,
-                    error => Reason
-                }), Req1),
-            {ok, FailResponse, State};
-        _ ->
-            % 处理其他错误
-            ErrorResponse = cowboy_req:reply(500, #{<<"content-type">> => <<"application/json">>},
-                jsx:encode(#{
-                    success => false,
-                    error => internal_server_error
-                }), Req1),
-            {ok, ErrorResponse, State}
-    end.
+    Response = cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>},
+        jsx:encode(#{
+            success => true,
+            data => Result
+        }), Req1),
+    {ok, Response, State}.
 
 %% @doc 终止处理器
 terminate(_Reason, _Req, _State) ->
