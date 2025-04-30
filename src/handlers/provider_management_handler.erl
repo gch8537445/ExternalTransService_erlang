@@ -36,13 +36,12 @@ init(Req0, State) ->
                        {error, invalid_operation}
                end,
 
-    logger:error("Result ~p", [Result]),
-
     try
         Response = cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, jsx:encode(Result), Req1),
         {ok, Response, State}
     catch
         _ ->
+            logger:error("Result ~p", [Result]),
             ErrorResponse = cowboy_req:reply(500, #{<<"content-type">> => <<"application/json">>}, Result, Req1),
             {ok, ErrorResponse, State}
     end.
