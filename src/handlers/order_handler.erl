@@ -27,10 +27,10 @@ init(Req0, State) ->
     
     % 根据路径和方法决定调用哪个服务方法
     Result =
-        case {Path} of
-            {<<"/api/order/estimate_price">>} -> % 预估价
+        case Path of
+            <<"/api/order/estimate_price">> -> % 预估价
                 order_service:estimate_price(Params);
-            {<<"/api/order/create_order">>} -> % 创建订单
+            <<"/api/order/create_order">> -> % 创建订单
                 order_service:create_order(Params);
             _ ->
                 {error, path_error}
